@@ -1,0 +1,139 @@
+@namespace Quote.Mobile.Components.Shared
+
+<div class="pull-refresh-container @(isRefreshing ? "refreshing" : "") @(isPulling ? "pulling" : "")"
+     @ontouchstart="HandleTouchStart"
+     @ontouchmove="HandleTouchMove"
+     @ontouchend="HandleTouchEnd">
+
+    <div class="pull-indicator" style="transform: translateY(@(pullDistance - 60)px); opacity: @(Math.Min(pullDistance / 80.0, 1))">
+        @if (isRefreshing)
+        {
+            <div class="refresh-spinner"></div>
+        }
+        else
+        {
+            <div class="pull-arrow @(pullDistance > 80 ? "ready" : "")">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 19V5M5 12l7-7 7 7"/>
+                </svg>
+            </div>
+        }
+        <span class="pull-text">@(isRefreshing ? "Refreshing..." : (pullDistance > 80 ? "Release to refresh" : "Pull to refresh"))</span>
+    </div>
+
+    <div class="pull-content" style="transform: translateY(@(isRefreshing ? 60 : Math.Min(pullDistance, 100))px)">
+        @ChildContent
+    </div>
+</div>
+
+<style>
+    .pull-refresh-container {
+        position: relative;
+        overflow: hidden;
+        min-height: 100%;
+    }
+
+    .pull-indicator {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        z-index: 10;
+    }
+
+    .pull-arrow {
+        color: #9ca3af;
+        transition: transform 0.2s;
+    }
+
+    .pull-arrow.ready {
+        color: #0d6efd;
+        transform: rotate(180deg);
+    }
+
+    .pull-text {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    .refresh-spinner {
+        width: 24px;
+        height: 24px;
+        border: 2px solid #e5e7eb;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    .pull-content {
+        transition: transform 0.2s ease-out;
+    }
+
+    .pull-refresh-container.refreshing .pull-content {
+        transition: transform 0.3s ease-out;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public EventCallback OnRefresh { get; set; }
+
+    private double startY = 0;
+    private double pullDistance = 0;
+    private bool isPulling = false;
+    private bool isRefreshing = false;
+
+    private void HandleTouchStart(TouchEventArgs e)
+    {
+        if (isRefreshing) return;
+        startY = e.Touches[0].ClientY;
+        isPulling = true;
+    }
+
+    private void HandleTouchMove(TouchEventArgs e)
+    {
+        if (!isPulling || isRefreshing) return;
+
+        var currentY = e.Touches[0].ClientY;
+        var diff = currentY - startY;
+
+        if (diff > 0)
+        {
+            pullDistance = diff * 0.5; // Add resistance
+        }
+    }
+
+    private async Task HandleTouchEnd(TouchEventArgs e)
+    {
+        if (!isPulling) return;
+
+        isPulling = false;
+
+        if (pullDistance > 80 && !isRefreshing)
+        {
+            isRefreshing = true;
+            pullDistance = 0;
+            StateHasChanged();
+
+            await OnRefresh.InvokeAsync();
+
+            isRefreshing = false;
+        }
+
+        pullDistance = 0;
+        StateHasChanged();
+    }
+}

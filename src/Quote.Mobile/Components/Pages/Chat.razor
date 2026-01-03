@@ -1,0 +1,689 @@
+@page "/chat/{ConversationId:guid}"
+@using Quote.Mobile.Services
+@inject ApiService Api
+@inject AuthService Auth
+@inject SignalRService SignalR
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<div class="chat-page">
+    @if (!isInitialized)
+    {
+        <div class="loading-center">
+            <div class="loader"></div>
+        </div>
+    }
+    else if (!Auth.IsAuthenticated)
+    {
+        <div class="not-auth">
+            <div class="not-auth-icon">🔒</div>
+            <h2>Sign in required</h2>
+            <p>Please sign in to view messages</p>
+            <button class="btn-primary" @onclick="GoToLogin">Sign In</button>
+        </div>
+    }
+    else if (conversation == null)
+    {
+        <div class="not-found">
+            <div class="not-found-icon">🔍</div>
+            <h2>Conversation not found</h2>
+            <button class="btn-primary" @onclick="GoBack">Go Back</button>
+        </div>
+    }
+    else
+    {
+        <!-- Header -->
+        <div class="chat-header">
+            <button class="back-btn" @onclick="GoBack">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <div class="header-info">
+                <div class="avatar-small">
+                    @(conversation.OtherParty.Name?.Substring(0, 1).ToUpper() ?? "?")
+                </div>
+                <div class="header-text">
+                    <h1>@conversation.OtherParty.Name</h1>
+                    @if (otherUserTyping)
+                    {
+                        <p class="typing">typing...</p>
+                    }
+                    else
+                    {
+                        <p>@conversation.JobTitle</p>
+                    }
+                </div>
+                @if (isConnected)
+                {
+                    <div class="live-indicator"></div>
+                }
+            </div>
+            <button class="job-btn" @onclick="ViewJob">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Messages -->
+        <div class="messages-container" @ref="messagesContainer">
+            @if (isLoading)
+            {
+                <div class="loading-messages">
+                    <div class="loader small"></div>
+                </div>
+            }
+            else
+            {
+                @foreach (var message in conversation.Messages)
+                {
+                    <div class="message @(message.IsMine ? "mine" : "theirs") @(message.IsSystemMessage ? "system" : "")">
+                        @if (message.IsSystemMessage)
+                        {
+                            <div class="system-message">@message.Content</div>
+                        }
+                        else
+                        {
+                            <div class="message-bubble">
+                                <p>@message.Content</p>
+                                @if (!string.IsNullOrEmpty(message.MediaUrl))
+                                {
+                                    @if (message.MediaType == "image")
+                                    {
+                                        <img src="@message.MediaUrl" alt="Attached image" class="message-image" />
+                                    }
+                                    else
+                                    {
+                                        <a href="@message.MediaUrl" target="_blank" class="message-file">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                            </svg>
+                                            @(message.FileName ?? "Attachment")
+                                        </a>
+                                    }
+                                }
+                                <span class="message-time">@FormatTime(message.SentAt)</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Input -->
+        <div class="chat-input">
+            <input type="text"
+                   value="@newMessage"
+                   @oninput="HandleInput"
+                   @onkeypress="HandleKeyPress"
+                   placeholder="Type a message..."
+                   disabled="@isSending" />
+            <button class="send-btn" @onclick="SendMessage" disabled="@(isSending || string.IsNullOrWhiteSpace(newMessage))">
+                @if (isSending)
+                {
+                    <div class="btn-loader"></div>
+                }
+                else
+                {
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                }
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .chat-page {
+        min-height: 100vh;
+        background: #f8f9fc;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .loading-center {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .loader {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e8eaed;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    .loader.small {
+        width: 24px;
+        height: 24px;
+        border-width: 2px;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .not-auth, .not-found {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+    }
+
+    .not-auth-icon, .not-found-icon {
+        font-size: 4rem;
+        margin-bottom: 16px;
+    }
+
+    .not-auth h2, .not-found h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .not-auth p {
+        color: #6b7280;
+        margin: 0 0 24px;
+    }
+
+    .btn-primary {
+        padding: 14px 32px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+    }
+
+    /* Header */
+    .chat-header {
+        background: #0d6efd;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+
+    .back-btn {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .header-info {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .avatar-small {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        font-weight: 700;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .header-text {
+        min-width: 0;
+    }
+
+    .header-text h1 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: white;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .header-text p {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.8);
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .header-text p.typing {
+        color: #90EE90;
+        font-style: italic;
+    }
+
+    .live-indicator {
+        width: 8px;
+        height: 8px;
+        background: #22c55e;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+
+    @@keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+
+    .job-btn {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    /* Messages Container */
+    .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .loading-messages {
+        display: flex;
+        justify-content: center;
+        padding: 40px;
+    }
+
+    .message {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .message.mine {
+        align-items: flex-end;
+    }
+
+    .message.theirs {
+        align-items: flex-start;
+    }
+
+    .message.system {
+        align-items: center;
+    }
+
+    .system-message {
+        background: #e5e7eb;
+        color: #6b7280;
+        font-size: 0.75rem;
+        padding: 8px 16px;
+        border-radius: 20px;
+        text-align: center;
+    }
+
+    .message-bubble {
+        max-width: 80%;
+        padding: 12px 16px;
+        border-radius: 20px;
+    }
+
+    .message.mine .message-bubble {
+        background: #0d6efd;
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+
+    .message.theirs .message-bubble {
+        background: white;
+        color: #1f2937;
+        border-bottom-left-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .message-bubble p {
+        margin: 0 0 4px;
+        font-size: 0.9375rem;
+        line-height: 1.4;
+        word-wrap: break-word;
+    }
+
+    .message-time {
+        font-size: 0.6875rem;
+        opacity: 0.7;
+    }
+
+    .message.mine .message-time {
+        text-align: right;
+    }
+
+    .message-image {
+        max-width: 100%;
+        border-radius: 12px;
+        margin-top: 8px;
+    }
+
+    .message-file {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        text-decoration: none;
+        color: inherit;
+        font-size: 0.875rem;
+        margin-top: 8px;
+    }
+
+    .message.mine .message-file {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Input */
+    .chat-input {
+        background: white;
+        padding: 16px 20px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        border-top: 1px solid #f3f4f6;
+    }
+
+    .chat-input input {
+        flex: 1;
+        padding: 14px 18px;
+        border: 2px solid #e5e7eb;
+        border-radius: 24px;
+        font-size: 0.9375rem;
+        background: #f9fafb;
+        color: #1f2937;
+    }
+
+    .chat-input input:focus {
+        outline: none;
+        border-color: #0d6efd;
+        background: white;
+    }
+
+    .chat-input input::placeholder {
+        color: #9ca3af;
+    }
+
+    .send-btn {
+        width: 48px;
+        height: 48px;
+        background: #0d6efd;
+        border: none;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+    }
+
+    .send-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-loader {
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Guid ConversationId { get; set; }
+
+    private ElementReference messagesContainer;
+    private bool isInitialized = false;
+    private bool isLoading = true;
+    private bool isSending = false;
+    private bool isConnected = false;
+    private bool otherUserTyping = false;
+    private string newMessage = "";
+    private ConversationDetailDto? conversation;
+    private System.Timers.Timer? typingTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        isInitialized = true;
+
+        if (Auth.IsAuthenticated)
+        {
+            await LoadConversation();
+            await ConnectSignalR();
+            await MarkAsRead();
+        }
+    }
+
+    private async Task ConnectSignalR()
+    {
+        SignalR.OnConnectionStateChanged += HandleConnectionStateChanged;
+        SignalR.OnMessageReceived += HandleMessageReceived;
+        SignalR.OnMessagesRead += HandleMessagesRead;
+        SignalR.OnUserTyping += HandleUserTyping;
+
+        await SignalR.ConnectAsync();
+        await SignalR.JoinConversationAsync(ConversationId);
+    }
+
+    private void HandleConnectionStateChanged(bool connected)
+    {
+        isConnected = connected;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleMessageReceived(MessageDto message)
+    {
+        if (conversation == null) return;
+
+        InvokeAsync(async () =>
+        {
+            conversation.Messages.Add(message);
+            otherUserTyping = false;
+            StateHasChanged();
+            await MarkAsRead();
+        });
+    }
+
+    private void HandleMessagesRead(Guid conversationId, Guid userId)
+    {
+        if (conversationId != ConversationId) return;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleUserTyping(Guid conversationId, Guid userId, bool isTyping)
+    {
+        if (conversationId != ConversationId) return;
+        if (conversation?.OtherParty?.UserId != userId) return;
+
+        InvokeAsync(() =>
+        {
+            otherUserTyping = isTyping;
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadConversation()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            conversation = await Api.GetConversationAsync(ConversationId);
+        }
+        catch { }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task MarkAsRead()
+    {
+        try
+        {
+            await Api.MarkConversationAsReadAsync(ConversationId);
+            if (isConnected)
+            {
+                await SignalR.MarkAsReadAsync(ConversationId);
+            }
+        }
+        catch { }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(newMessage) || isSending) return;
+
+        isSending = true;
+        var messageToSend = newMessage;
+        newMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            await SignalR.StopTypingAsync(ConversationId);
+
+            if (isConnected)
+            {
+                await SignalR.SendMessageAsync(ConversationId, messageToSend);
+            }
+            else
+            {
+                var request = new SendMessageRequest(
+                    ConversationId,
+                    messageToSend,
+                    null, null, null
+                );
+
+                var sent = await Api.SendMessageAsync(request);
+                if (sent != null && conversation != null)
+                {
+                    conversation.Messages.Add(sent);
+                }
+            }
+        }
+        catch
+        {
+            newMessage = messageToSend;
+        }
+        finally
+        {
+            isSending = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        newMessage = e.Value?.ToString() ?? "";
+
+        if (isConnected && !string.IsNullOrWhiteSpace(newMessage))
+        {
+            await SignalR.StartTypingAsync(ConversationId);
+
+            typingTimer?.Stop();
+            typingTimer = new System.Timers.Timer(2000);
+            typingTimer.Elapsed += async (s, ev) =>
+            {
+                typingTimer?.Stop();
+                await SignalR.StopTypingAsync(ConversationId);
+            };
+            typingTimer.Start();
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newMessage))
+        {
+            await SendMessage();
+        }
+    }
+
+    private string FormatTime(DateTime dateTime)
+    {
+        var local = dateTime.ToLocalTime();
+        var now = DateTime.Now;
+
+        if (local.Date == now.Date)
+            return local.ToString("h:mm tt");
+        if (local.Date == now.Date.AddDays(-1))
+            return "Yesterday " + local.ToString("h:mm tt");
+        return local.ToString("MMM d, h:mm tt");
+    }
+
+    private void ViewJob()
+    {
+        if (conversation != null)
+        {
+            Navigation.NavigateTo($"/job/{conversation.JobId}");
+        }
+    }
+
+    private void GoToLogin() => Navigation.NavigateTo("/login");
+    private void GoBack() => Navigation.NavigateTo("/messages");
+
+    public async ValueTask DisposeAsync()
+    {
+        SignalR.OnConnectionStateChanged -= HandleConnectionStateChanged;
+        SignalR.OnMessageReceived -= HandleMessageReceived;
+        SignalR.OnMessagesRead -= HandleMessagesRead;
+        SignalR.OnUserTyping -= HandleUserTyping;
+
+        if (isConnected)
+        {
+            await SignalR.LeaveConversationAsync(ConversationId);
+        }
+
+        typingTimer?.Dispose();
+    }
+}

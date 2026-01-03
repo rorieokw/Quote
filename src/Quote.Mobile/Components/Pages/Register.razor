@@ -1,0 +1,473 @@
+@page "/register"
+@inject ApiService Api
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<div class="register-page">
+    <div class="register-header">
+        <button class="back-btn" @onclick="GoBack">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+        </button>
+        <div class="logo-box">
+            <span>Q</span>
+        </div>
+        <h1>Create Account</h1>
+        <p>Join Australia's trade marketplace</p>
+    </div>
+
+    <div class="register-form">
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="error-box">
+                <span class="error-icon">!</span>
+                <span>@errorMessage</span>
+            </div>
+        }
+
+        <!-- Account Type Selection -->
+        <div class="type-selector">
+            <button class="type-btn @(userType == "Customer" ? "active" : "")" @onclick='() => SetUserType("Customer")'>
+                <span class="type-icon">🏠</span>
+                <span class="type-label">Customer</span>
+                <span class="type-desc">I need work done</span>
+            </button>
+            <button class="type-btn @(userType == "Tradie" ? "active" : "")" @onclick='() => SetUserType("Tradie")'>
+                <span class="type-icon">🔧</span>
+                <span class="type-label">Tradie</span>
+                <span class="type-desc">I provide services</span>
+            </button>
+        </div>
+
+        <div class="input-row">
+            <div class="input-group half">
+                <label>First Name</label>
+                <input type="text" @bind="firstName" placeholder="John" />
+            </div>
+            <div class="input-group half">
+                <label>Last Name</label>
+                <input type="text" @bind="lastName" placeholder="Smith" />
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Email</label>
+            <input type="email" @bind="email" placeholder="you@example.com" />
+        </div>
+
+        <div class="input-group">
+            <label>Phone (optional)</label>
+            <input type="tel" @bind="phone" placeholder="0400 000 000" />
+        </div>
+
+        @if (userType == "Tradie")
+        {
+            <div class="input-group">
+                <label>ABN (optional)</label>
+                <input type="text" @bind="abn" placeholder="12 345 678 901" />
+            </div>
+        }
+
+        <div class="input-group">
+            <label>Password</label>
+            <input type="password" @bind="password" placeholder="Min 8 characters" />
+        </div>
+
+        <div class="input-group">
+            <label>Confirm Password</label>
+            <input type="password" @bind="confirmPassword" placeholder="Re-enter password" />
+        </div>
+
+        <button class="btn-register" @onclick="HandleRegister" disabled="@isLoading">
+            @if (isLoading)
+            {
+                <div class="btn-loader"></div>
+            }
+            else
+            {
+                <span>Create Account</span>
+            }
+        </button>
+
+        <div class="terms-text">
+            By signing up, you agree to our<br/>
+            <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+        </div>
+
+        <div class="divider">
+            <span>or</span>
+        </div>
+
+        <button class="btn-login" @onclick="GoToLogin">
+            Already have an account? <span>Sign In</span>
+        </button>
+    </div>
+</div>
+
+<style>
+    .register-page {
+        min-height: 100vh;
+        background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+        padding: 20px 20px 40px;
+    }
+
+    .register-header {
+        text-align: center;
+        padding: 8px 0 24px;
+        position: relative;
+    }
+
+    .back-btn {
+        position: absolute;
+        left: 0;
+        top: 8px;
+        width: 44px;
+        height: 44px;
+        background: white;
+        border: none;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .logo-box {
+        width: 56px;
+        height: 56px;
+        background: #0d6efd;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 16px;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+    }
+
+    .logo-box span {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: white;
+    }
+
+    .register-header h1 {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #1f2937;
+        margin: 0 0 6px;
+    }
+
+    .register-header p {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .register-form {
+        background: white;
+        border-radius: 24px;
+        padding: 24px 20px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+    }
+
+    .error-box {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.875rem;
+        color: #dc2626;
+        font-weight: 500;
+    }
+
+    .error-icon {
+        width: 22px;
+        height: 22px;
+        background: #dc2626;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    /* Type Selector */
+    .type-selector {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .type-btn {
+        flex: 1;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .type-btn.active {
+        background: #e7f1ff;
+        border-color: #0d6efd;
+    }
+
+    .type-icon {
+        font-size: 1.5rem;
+    }
+
+    .type-label {
+        font-size: 0.9375rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .type-desc {
+        font-size: 0.6875rem;
+        color: #9ca3af;
+    }
+
+    .type-btn.active .type-label {
+        color: #0d6efd;
+    }
+
+    /* Input Groups */
+    .input-row {
+        display: flex;
+        gap: 12px;
+    }
+
+    .input-group {
+        margin-bottom: 16px;
+    }
+
+    .input-group.half {
+        flex: 1;
+    }
+
+    .input-group label {
+        display: block;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+
+    .input-group input {
+        width: 100%;
+        padding: 14px 16px;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        background: #f9fafb;
+        color: #1f2937;
+        box-sizing: border-box;
+        transition: all 0.2s;
+    }
+
+    .input-group input:focus {
+        outline: none;
+        border-color: #0d6efd;
+        background: white;
+        box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1);
+    }
+
+    .input-group input::placeholder {
+        color: #9ca3af;
+    }
+
+    .btn-register {
+        width: 100%;
+        padding: 16px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+        transition: all 0.2s;
+        margin-top: 8px;
+    }
+
+    .btn-register:active {
+        transform: scale(0.98);
+    }
+
+    .btn-register:disabled {
+        opacity: 0.7;
+    }
+
+    .btn-loader {
+        width: 22px;
+        height: 22px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .terms-text {
+        text-align: center;
+        font-size: 0.75rem;
+        color: #9ca3af;
+        margin-top: 16px;
+        line-height: 1.5;
+    }
+
+    .terms-text a {
+        color: #0d6efd;
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .divider {
+        text-align: center;
+        margin: 20px 0;
+        position: relative;
+        color: #9ca3af;
+        font-size: 0.8125rem;
+    }
+
+    .divider::before,
+    .divider::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        width: 40%;
+        height: 1px;
+        background: #e5e7eb;
+    }
+
+    .divider::before { left: 0; }
+    .divider::after { right: 0; }
+
+    .btn-login {
+        width: 100%;
+        padding: 14px;
+        background: transparent;
+        color: #6b7280;
+        border: none;
+        font-size: 0.9375rem;
+        cursor: pointer;
+    }
+
+    .btn-login span {
+        color: #0d6efd;
+        font-weight: 600;
+    }
+</style>
+
+@code {
+    private string firstName = "";
+    private string lastName = "";
+    private string email = "";
+    private string phone = "";
+    private string abn = "";
+    private string password = "";
+    private string confirmPassword = "";
+    private string userType = "Customer";
+    private string errorMessage = "";
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        if (Auth.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private void SetUserType(string type)
+    {
+        userType = type;
+    }
+
+    private async Task HandleRegister()
+    {
+        errorMessage = "";
+
+        if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+        {
+            errorMessage = "Please enter your name";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            errorMessage = "Please enter your email";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+        {
+            errorMessage = "Password must be at least 8 characters";
+            return;
+        }
+
+        if (password != confirmPassword)
+        {
+            errorMessage = "Passwords do not match";
+            return;
+        }
+
+        isLoading = true;
+
+        try
+        {
+            var request = new RegisterRequest(
+                email,
+                password,
+                firstName,
+                lastName,
+                userType,
+                string.IsNullOrWhiteSpace(phone) ? null : phone,
+                string.IsNullOrWhiteSpace(abn) ? null : abn
+            );
+
+            var result = await Api.RegisterAsync(request);
+            if (result != null)
+            {
+                await Auth.SaveAuthAsync(result);
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                errorMessage = "Registration failed. Please try again.";
+            }
+        }
+        catch (Exception)
+        {
+            errorMessage = "Connection failed. Check your internet.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void GoToLogin() => Navigation.NavigateTo("/login");
+    private void GoBack() => Navigation.NavigateTo("/login");
+}

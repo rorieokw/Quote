@@ -1,0 +1,1452 @@
+@page "/job/{JobId:guid}"
+@using Quote.Mobile.Components.Shared
+@inject ApiService Api
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<Toast @ref="toast" />
+<PhotoMarkup
+    IsVisible="showMarkupComponent"
+    ImageUrl="@selectedPhotoUrl"
+    OnCancel="OnMarkupCancel"
+    OnSave="OnMarkupSave" />
+
+<div class="job-detail-page">
+    @if (isLoading)
+    {
+        <div class="loading-center">
+            <div class="loader"></div>
+        </div>
+    }
+    else if (job == null)
+    {
+        <div class="error-state">
+            <div class="error-icon">😕</div>
+            <h2>Job not found</h2>
+            <p>This job may have been removed</p>
+            <button class="btn-primary" @onclick="GoBack">Go Back</button>
+        </div>
+    }
+    else
+    {
+        <!-- Header -->
+        <div class="detail-header">
+            <button class="back-btn" @onclick="GoBack">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <h1>Job Details</h1>
+            <div class="spacer"></div>
+        </div>
+
+        <!-- Content -->
+        <div class="detail-content">
+            <!-- Status & Category -->
+            <div class="job-badges">
+                <span class="category-badge">@job.TradeCategoryName</span>
+                <span class="status-badge @job.Status.ToLower()">@job.Status</span>
+            </div>
+
+            <!-- Title -->
+            <h2 class="job-title">@job.Title</h2>
+
+            <!-- Info Cards -->
+            <div class="info-grid">
+                <div class="info-card">
+                    <span class="info-icon">📍</span>
+                    <div class="info-text">
+                        <span class="info-label">Location</span>
+                        <span class="info-value">@job.SuburbName, @job.State @job.Postcode</span>
+                    </div>
+                </div>
+                @if (job.BudgetMax.HasValue)
+                {
+                    <div class="info-card">
+                        <span class="info-icon">💰</span>
+                        <div class="info-text">
+                            <span class="info-label">Budget</span>
+                            <span class="info-value budget">
+                                @if (job.BudgetMin.HasValue)
+                                {
+                                    @:$@job.BudgetMin.Value.ToString("N0") - $@job.BudgetMax.Value.ToString("N0")
+                                }
+                                else
+                                {
+                                    @:Up to $@job.BudgetMax.Value.ToString("N0")
+                                }
+                            </span>
+                        </div>
+                    </div>
+                }
+                <div class="info-card">
+                    <span class="info-icon">📅</span>
+                    <div class="info-text">
+                        <span class="info-label">Posted</span>
+                        <span class="info-value">@GetTimeAgo(job.CreatedAt)</span>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <span class="info-icon">📝</span>
+                    <div class="info-text">
+                        <span class="info-label">Quotes</span>
+                        <span class="info-value">@job.QuoteCount received</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="section-card">
+                <h3>Description</h3>
+                <p>@job.Description</p>
+            </div>
+
+            <!-- Schedule -->
+            <div class="section-card">
+                <h3>Schedule</h3>
+                @if (job.PreferredStartDate.HasValue)
+                {
+                    <div class="detail-row">
+                        <span class="detail-label">Preferred Start</span>
+                        <span class="detail-value">@job.PreferredStartDate.Value.ToString("d MMM yyyy")</span>
+                    </div>
+                }
+                <div class="detail-row">
+                    <span class="detail-label">Flexible Dates</span>
+                    <span class="detail-value">@(job.IsFlexibleDates ? "Yes" : "No")</span>
+                </div>
+            </div>
+
+            <!-- Customer -->
+            <div class="section-card customer">
+                <div class="customer-avatar">
+                    @(job.CustomerName.Substring(0, 1).ToUpper())
+                </div>
+                <div class="customer-info">
+                    <span class="customer-name">@job.CustomerName</span>
+                    <span class="customer-label">Posted this job</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quote Button -->
+        @if (Auth.IsAuthenticated && Auth.IsTradie)
+        {
+            <div class="quote-footer">
+                @if (showQuoteForm)
+                {
+                    <div class="quote-form">
+                        <h3>Submit Your Quote</h3>
+
+                        @if (!string.IsNullOrEmpty(quoteError))
+                        {
+                            <div class="quote-error">@quoteError</div>
+                        }
+
+                        <!-- Price Benchmark -->
+                        <PriceBenchmarkHint
+                            Benchmark="@priceBenchmark"
+                            YourPrice="@(labourCost + CalculateMaterialsTotal())"
+                            IsLoading="@isBenchmarkLoading"
+                            NoDataAvailable="@benchmarkNoData" />
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Labour Cost *</label>
+                                <div class="input-prefix">
+                                    <span>$</span>
+                                    <input type="number" @bind="labourCost" placeholder="0" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Materials Total</label>
+                                <div class="materials-total-display">$@CalculateMaterialsTotal().ToString("N2")</div>
+                            </div>
+                        </div>
+
+                        <!-- Materials Section -->
+                        <div class="materials-section">
+                            <div class="materials-header" @onclick="ToggleMaterialsPanel">
+                                <span class="materials-title">Material Items (@materialItems.Count)</span>
+                                <span class="materials-toggle">@(showMaterialsPanel ? "−" : "+")</span>
+                            </div>
+
+                            @if (showMaterialsPanel)
+                            {
+                                <div class="materials-panel">
+                                    <!-- Bundle Selector -->
+                                    @if (savedBundles.Any())
+                                    {
+                                        <div class="bundle-selector">
+                                            <select @onchange="OnBundleSelected">
+                                                <option value="">Load from saved bundle...</option>
+                                                @foreach (var bundle in savedBundles)
+                                                {
+                                                    <option value="@bundle.Id">@bundle.Name (@bundle.ItemCount items - $@bundle.TotalCost.ToString("N0"))</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    }
+
+                                    <!-- Material Items List -->
+                                    @foreach (var (item, index) in materialItems.Select((m, i) => (m, i)))
+                                    {
+                                        <div class="material-item">
+                                            <div class="material-item-row">
+                                                <input type="text" @bind="item.ProductName" placeholder="Product name *" class="material-input product" />
+                                                <button class="remove-item-btn" @onclick="() => RemoveMaterialItem(index)">×</button>
+                                            </div>
+                                            <div class="material-item-row details">
+                                                <input type="number" @bind="item.Quantity" placeholder="Qty" class="material-input qty" step="0.01" />
+                                                <input type="text" @bind="item.Unit" placeholder="Unit" class="material-input unit" />
+                                                <div class="input-prefix price">
+                                                    <span>$</span>
+                                                    <input type="number" @bind="item.UnitPrice" placeholder="Price" step="0.01" />
+                                                </div>
+                                                <span class="item-total">$@((item.Quantity * item.UnitPrice).ToString("N2"))</span>
+                                            </div>
+                                            <input type="text" @bind="item.SupplierName" placeholder="Supplier (optional)" class="material-input full" />
+                                        </div>
+                                    }
+
+                                    <button class="add-material-btn" @onclick="AddMaterialItem">+ Add Material</button>
+
+                                    <!-- Save as Bundle -->
+                                    @if (materialItems.Any())
+                                    {
+                                        <div class="save-bundle-row">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" @bind="saveAsBundle" />
+                                                <span>Save as bundle for future use</span>
+                                            </label>
+                                            @if (saveAsBundle)
+                                            {
+                                                <input type="text" @bind="newBundleName" placeholder="Bundle name" class="bundle-name-input" />
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Photo Markup Section -->
+                        @if (job?.MediaUrls != null && job.MediaUrls.Any())
+                        {
+                            <div class="photo-markup-section">
+                                <div class="materials-header" @onclick="TogglePhotoPanel">
+                                    <span class="materials-title">Photo Notes (@photoAnnotations.Count)</span>
+                                    <span class="materials-toggle">@(showPhotoPanel ? "−" : "+")</span>
+                                </div>
+
+                                @if (showPhotoPanel)
+                                {
+                                    <div class="photo-panel">
+                                        <p class="photo-hint">Tap a photo to add markup notes</p>
+                                        <div class="photo-grid">
+                                            @foreach (var mediaUrl in job.MediaUrls)
+                                            {
+                                                <div class="photo-thumb" @onclick="() => OpenPhotoMarkup(mediaUrl)">
+                                                    <img src="@mediaUrl" alt="Job photo" />
+                                                    <div class="photo-overlay">
+                                                        <span>+ Add Notes</span>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        @if (photoAnnotations.Any())
+                                        {
+                                            <div class="annotations-list">
+                                                <h4>Your Annotations</h4>
+                                                @foreach (var annotation in photoAnnotations)
+                                                {
+                                                    <div class="annotation-thumb">
+                                                        <img src="@annotation.ImageBase64" alt="Annotated photo" />
+                                                        <button class="remove-annotation-btn" @onclick="() => RemoveAnnotation(annotation)">×</button>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <div class="form-group">
+                            <label>Estimated Hours *</label>
+                            <input type="number" @bind="estimatedHours" placeholder="e.g., 4" />
+                        </div>
+
+                        <div class="form-group">
+                            <label>Notes (optional)</label>
+                            <textarea @bind="notes" placeholder="Add any notes for the customer..."></textarea>
+                        </div>
+
+                        <div class="total-row">
+                            <span>Total Quote</span>
+                            <span class="total-amount">$@((labourCost + CalculateMaterialsTotal()).ToString("N2"))</span>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn-cancel" @onclick="CancelQuote">Cancel</button>
+                            <button class="btn-submit" @onclick="SubmitQuote" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <div class="btn-loader"></div>
+                                }
+                                else
+                                {
+                                    <span>Submit Quote</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                }
+                else if (quoteSubmitted)
+                {
+                    <div class="quote-success">
+                        <span class="success-icon">✓</span>
+                        <span>Quote submitted successfully!</span>
+                    </div>
+                }
+                else
+                {
+                    <button class="btn-quote" @onclick="ShowQuoteForm">
+                        Submit Quote
+                    </button>
+                }
+            </div>
+        }
+        else if (!Auth.IsAuthenticated)
+        {
+            <div class="quote-footer">
+                <button class="btn-quote" @onclick="GoToLogin">
+                    Sign In to Quote
+                </button>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .job-detail-page {
+        min-height: 100vh;
+        background: #f8f9fc;
+        padding-bottom: 100px;
+    }
+
+    .loading-center {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .loader {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e8eaed;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-state {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+    }
+
+    .error-icon {
+        font-size: 4rem;
+        margin-bottom: 16px;
+    }
+
+    .error-state h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .error-state p {
+        color: #6b7280;
+        margin: 0 0 24px;
+    }
+
+    .btn-primary {
+        padding: 14px 32px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    /* Header */
+    .detail-header {
+        background: white;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .back-btn {
+        width: 40px;
+        height: 40px;
+        background: #f3f4f6;
+        border: none;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        cursor: pointer;
+    }
+
+    .detail-header h1 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+        flex: 1;
+    }
+
+    .spacer {
+        width: 40px;
+    }
+
+    /* Content */
+    .detail-content {
+        padding: 20px 16px;
+    }
+
+    .job-badges {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .category-badge {
+        background: #e7f1ff;
+        color: #0d6efd;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 6px 14px;
+        border-radius: 10px;
+    }
+
+    .status-badge {
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 6px 14px;
+        border-radius: 10px;
+    }
+
+    .status-badge.open {
+        background: #d1fae5;
+        color: #059669;
+    }
+
+    .status-badge.closed {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
+    .status-badge.pending {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .job-title {
+        font-size: 1.375rem;
+        font-weight: 700;
+        color: #1f2937;
+        line-height: 1.3;
+        margin: 0 0 20px;
+    }
+
+    /* Info Grid */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .info-card {
+        background: white;
+        border-radius: 16px;
+        padding: 14px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .info-icon {
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+
+    .info-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .info-label {
+        font-size: 0.6875rem;
+        color: #9ca3af;
+        font-weight: 500;
+    }
+
+    .info-value {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .info-value.budget {
+        color: #10b981;
+    }
+
+    /* Section Cards */
+    .section-card {
+        background: white;
+        border-radius: 20px;
+        padding: 18px;
+        margin-bottom: 14px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .section-card h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 12px;
+    }
+
+    .section-card p {
+        font-size: 0.9375rem;
+        color: #4b5563;
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .detail-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .detail-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .detail-value {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    /* Customer Card */
+    .section-card.customer {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .customer-avatar {
+        width: 48px;
+        height: 48px;
+        background: #0d6efd;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: white;
+    }
+
+    .customer-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .customer-name {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .customer-label {
+        font-size: 0.8125rem;
+        color: #9ca3af;
+    }
+
+    /* Quote Footer */
+    .quote-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        padding: 16px 20px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+        border-radius: 24px 24px 0 0;
+    }
+
+    .btn-quote {
+        width: 100%;
+        padding: 18px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 16px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+    }
+
+    .btn-quote:active {
+        transform: scale(0.98);
+    }
+
+    /* Quote Form */
+    .quote-form h3 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 16px;
+    }
+
+    .quote-error {
+        background: #fef2f2;
+        color: #dc2626;
+        padding: 12px 14px;
+        border-radius: 12px;
+        font-size: 0.875rem;
+        margin-bottom: 16px;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 12px;
+    }
+
+    .form-group {
+        margin-bottom: 14px;
+        flex: 1;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        background: #f9fafb;
+        color: #1f2937;
+        box-sizing: border-box;
+    }
+
+    .form-group textarea {
+        min-height: 80px;
+        resize: none;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+        outline: none;
+        border-color: #0d6efd;
+        background: white;
+    }
+
+    .input-prefix {
+        position: relative;
+    }
+
+    .input-prefix span {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        font-weight: 500;
+    }
+
+    .input-prefix input {
+        padding-left: 30px;
+    }
+
+    .total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 0;
+        border-top: 1px solid #e5e7eb;
+        margin-bottom: 16px;
+    }
+
+    .total-row span:first-child {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: #6b7280;
+    }
+
+    .total-amount {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #10b981;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 12px;
+    }
+
+    .btn-cancel {
+        flex: 1;
+        padding: 14px;
+        background: #f3f4f6;
+        color: #6b7280;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-submit {
+        flex: 2;
+        padding: 14px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-submit:disabled {
+        opacity: 0.7;
+    }
+
+    .btn-loader {
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    /* Success State */
+    .quote-success {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 18px;
+        background: #d1fae5;
+        border-radius: 16px;
+        color: #059669;
+        font-weight: 600;
+    }
+
+    .success-icon {
+        width: 24px;
+        height: 24px;
+        background: #059669;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
+    }
+
+    /* Materials Total Display */
+    .materials-total-display {
+        padding: 12px 14px;
+        background: #f0fdf4;
+        border: 2px solid #bbf7d0;
+        border-radius: 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #16a34a;
+        text-align: center;
+    }
+
+    /* Materials Section */
+    .materials-section {
+        background: #f8fafc;
+        border-radius: 14px;
+        margin-bottom: 14px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
+
+    .materials-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 16px;
+        cursor: pointer;
+        background: white;
+    }
+
+    .materials-title {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .materials-toggle {
+        width: 24px;
+        height: 24px;
+        background: #e5e7eb;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        color: #6b7280;
+        font-weight: bold;
+    }
+
+    .materials-panel {
+        padding: 14px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .bundle-selector {
+        margin-bottom: 14px;
+    }
+
+    .bundle-selector select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        background: white;
+        color: #374151;
+    }
+
+    .material-item {
+        background: white;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+        border: 1px solid #e5e7eb;
+    }
+
+    .material-item-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .material-item-row.details {
+        margin-top: 8px;
+    }
+
+    .material-input {
+        padding: 8px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 0.8125rem;
+        background: #f9fafb;
+    }
+
+    .material-input:focus {
+        outline: none;
+        border-color: #0d6efd;
+        background: white;
+    }
+
+    .material-input.product {
+        flex: 1;
+    }
+
+    .material-input.qty {
+        width: 55px;
+    }
+
+    .material-input.unit {
+        width: 55px;
+    }
+
+    .material-input.full {
+        width: 100%;
+        margin-top: 8px;
+    }
+
+    .materials-panel .input-prefix.price {
+        position: relative;
+        width: 70px;
+    }
+
+    .materials-panel .input-prefix.price span {
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        font-size: 0.75rem;
+    }
+
+    .materials-panel .input-prefix.price input {
+        width: 100%;
+        padding: 8px 10px 8px 20px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 0.8125rem;
+        background: #f9fafb;
+    }
+
+    .item-total {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #16a34a;
+        min-width: 60px;
+        text-align: right;
+    }
+
+    .remove-item-btn {
+        width: 28px;
+        height: 28px;
+        background: #fee2e2;
+        color: #dc2626;
+        border: none;
+        border-radius: 8px;
+        font-size: 1.25rem;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .add-material-btn {
+        width: 100%;
+        padding: 12px;
+        background: #eff6ff;
+        color: #0d6efd;
+        border: 2px dashed #93c5fd;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 12px;
+    }
+
+    .save-bundle-row {
+        background: #fefce8;
+        border-radius: 10px;
+        padding: 12px;
+        border: 1px solid #fef08a;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.875rem;
+        color: #374151;
+        cursor: pointer;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #0d6efd;
+    }
+
+    .bundle-name-input {
+        width: 100%;
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        background: white;
+    }
+
+    /* Photo Markup Section */
+    .photo-markup-section {
+        background: #f8fafc;
+        border-radius: 14px;
+        margin-bottom: 14px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
+
+    .photo-panel {
+        padding: 14px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .photo-hint {
+        font-size: 0.8125rem;
+        color: #6b7280;
+        margin: 0 0 12px;
+        text-align: center;
+    }
+
+    .photo-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .photo-thumb {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 10px;
+        overflow: hidden;
+        cursor: pointer;
+        border: 2px solid #e5e7eb;
+    }
+
+    .photo-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .photo-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(13, 110, 253, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .photo-thumb:hover .photo-overlay,
+    .photo-thumb:active .photo-overlay {
+        opacity: 1;
+    }
+
+    .photo-overlay span {
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .annotations-list {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 14px;
+    }
+
+    .annotations-list h4 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #374151;
+        margin: 0 0 10px;
+    }
+
+    .annotation-thumb {
+        position: relative;
+        display: inline-block;
+        width: 80px;
+        height: 80px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 2px solid #10b981;
+    }
+
+    .annotation-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .remove-annotation-btn {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 22px;
+        height: 22px;
+        background: #ef4444;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        font-size: 0.875rem;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Guid JobId { get; set; }
+
+    private Toast? toast;
+    private JobDto? job;
+    private bool isLoading = true;
+    private bool showQuoteForm = false;
+    private bool isSubmitting = false;
+    private bool quoteSubmitted = false;
+    private string quoteError = "";
+
+    private decimal labourCost = 0;
+    private int estimatedHours = 0;
+    private string notes = "";
+
+    // Materials
+    private bool showMaterialsPanel = false;
+    private List<MaterialItemModel> materialItems = new();
+    private List<MaterialBundleDto> savedBundles = new();
+    private bool saveAsBundle = false;
+    private string newBundleName = "";
+
+    // Photo Markup
+    private bool showPhotoPanel = false;
+    private bool showMarkupComponent = false;
+    private string selectedPhotoUrl = "";
+    private List<PhotoAnnotationModel> photoAnnotations = new();
+
+    // Price Benchmarking
+    private PriceBenchmarkDto? priceBenchmark;
+    private bool isBenchmarkLoading = false;
+    private bool benchmarkNoData = false;
+
+    private class PhotoAnnotationModel
+    {
+        public string ImageBase64 { get; set; } = "";
+        public string AnnotationJson { get; set; } = "";
+        public string? OriginalMediaUrl { get; set; }
+    }
+
+    // Material item model for local editing
+    private class MaterialItemModel
+    {
+        public string ProductName { get; set; } = "";
+        public string? SupplierName { get; set; }
+        public string? ProductUrl { get; set; }
+        public decimal Quantity { get; set; } = 1;
+        public string? Unit { get; set; }
+        public decimal UnitPrice { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        await LoadJob();
+        if (Auth.IsAuthenticated && Auth.IsTradie)
+        {
+            await LoadSavedBundles();
+        }
+    }
+
+    private async Task LoadSavedBundles()
+    {
+        try
+        {
+            savedBundles = await Api.GetMaterialBundlesAsync();
+        }
+        catch
+        {
+            savedBundles = new();
+        }
+    }
+
+    private async Task LoadJob()
+    {
+        isLoading = true;
+        try
+        {
+            job = await Api.GetJobAsync(JobId);
+        }
+        catch { }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ShowQuoteForm()
+    {
+        showQuoteForm = true;
+        await LoadPriceBenchmark();
+    }
+
+    private async Task LoadPriceBenchmark()
+    {
+        if (job == null || !job.TradeCategoryId.HasValue)
+        {
+            benchmarkNoData = true;
+            return;
+        }
+
+        isBenchmarkLoading = true;
+        benchmarkNoData = false;
+        priceBenchmark = null;
+        StateHasChanged();
+
+        try
+        {
+            priceBenchmark = await Api.GetPriceBenchmarkAsync(job.TradeCategoryId.Value, job.Postcode);
+            benchmarkNoData = priceBenchmark == null;
+        }
+        catch
+        {
+            benchmarkNoData = true;
+        }
+        finally
+        {
+            isBenchmarkLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelQuote()
+    {
+        showQuoteForm = false;
+        quoteError = "";
+        materialItems.Clear();
+        showMaterialsPanel = false;
+        saveAsBundle = false;
+        newBundleName = "";
+        photoAnnotations.Clear();
+        showPhotoPanel = false;
+        priceBenchmark = null;
+        benchmarkNoData = false;
+    }
+
+    private void ToggleMaterialsPanel()
+    {
+        showMaterialsPanel = !showMaterialsPanel;
+    }
+
+    private void TogglePhotoPanel()
+    {
+        showPhotoPanel = !showPhotoPanel;
+    }
+
+    private void OpenPhotoMarkup(string mediaUrl)
+    {
+        selectedPhotoUrl = mediaUrl;
+        showMarkupComponent = true;
+    }
+
+    private void OnMarkupCancel()
+    {
+        showMarkupComponent = false;
+        selectedPhotoUrl = "";
+    }
+
+    private void OnMarkupSave(PhotoMarkup.MarkupResult result)
+    {
+        photoAnnotations.Add(new PhotoAnnotationModel
+        {
+            ImageBase64 = result.AnnotatedImageBase64,
+            AnnotationJson = result.AnnotationJson,
+            OriginalMediaUrl = selectedPhotoUrl
+        });
+        showMarkupComponent = false;
+        selectedPhotoUrl = "";
+        StateHasChanged();
+    }
+
+    private void RemoveAnnotation(PhotoAnnotationModel annotation)
+    {
+        photoAnnotations.Remove(annotation);
+    }
+
+    private void AddMaterialItem()
+    {
+        materialItems.Add(new MaterialItemModel());
+    }
+
+    private void RemoveMaterialItem(int index)
+    {
+        if (index >= 0 && index < materialItems.Count)
+        {
+            materialItems.RemoveAt(index);
+        }
+    }
+
+    private async Task OnBundleSelected(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var bundleId))
+        {
+            var bundle = await Api.GetMaterialBundleAsync(bundleId);
+            if (bundle != null)
+            {
+                materialItems.Clear();
+                foreach (var item in bundle.Items)
+                {
+                    materialItems.Add(new MaterialItemModel
+                    {
+                        ProductName = item.ProductName,
+                        SupplierName = item.SupplierName,
+                        ProductUrl = item.ProductUrl,
+                        Quantity = item.DefaultQuantity,
+                        Unit = item.Unit,
+                        UnitPrice = item.EstimatedUnitPrice
+                    });
+                }
+            }
+        }
+    }
+
+    private decimal CalculateMaterialsTotal()
+    {
+        return materialItems.Sum(m => m.Quantity * m.UnitPrice);
+    }
+
+    private async Task SubmitQuote()
+    {
+        quoteError = "";
+
+        if (labourCost <= 0)
+        {
+            quoteError = "Please enter a labour cost";
+            return;
+        }
+
+        if (estimatedHours <= 0)
+        {
+            quoteError = "Please enter estimated hours";
+            return;
+        }
+
+        // Validate save as bundle
+        if (saveAsBundle && string.IsNullOrWhiteSpace(newBundleName))
+        {
+            quoteError = "Please enter a name for the bundle";
+            return;
+        }
+
+        isSubmitting = true;
+
+        try
+        {
+            // Convert material items to request DTOs
+            var materials = materialItems
+                .Where(m => !string.IsNullOrWhiteSpace(m.ProductName) && m.Quantity > 0)
+                .Select(m => new QuoteMaterialRequest(
+                    m.ProductName,
+                    m.SupplierName,
+                    m.ProductUrl,
+                    m.Quantity,
+                    m.Unit,
+                    m.UnitPrice
+                ))
+                .ToList();
+
+            var materialsCost = materials.Any() ? CalculateMaterialsTotal() : (decimal?)null;
+
+            var request = new QuickQuoteRequest(
+                JobId,
+                labourCost,
+                materialsCost,
+                estimatedHours,
+                string.IsNullOrWhiteSpace(notes) ? null : notes,
+                null, // TemplateId
+                null, // ProposedStartDate
+                false, // DepositRequired
+                null, // DepositPercentage
+                materials.Any() ? materials : null,
+                null, // MaterialBundleId
+                saveAsBundle,
+                saveAsBundle ? newBundleName : null
+            );
+
+            var success = await Api.SubmitQuoteAsync(request);
+            if (success)
+            {
+                showQuoteForm = false;
+                quoteSubmitted = true;
+                materialItems.Clear();
+                showMaterialsPanel = false;
+                saveAsBundle = false;
+                newBundleName = "";
+                photoAnnotations.Clear();
+                showPhotoPanel = false;
+                toast?.ShowSuccess("Quote submitted successfully! The customer will be notified.");
+
+                // Reload bundles if a new one was saved
+                if (saveAsBundle)
+                {
+                    await LoadSavedBundles();
+                }
+            }
+            else
+            {
+                quoteError = "Failed to submit quote. Please try again.";
+                toast?.ShowError("Failed to submit quote");
+            }
+        }
+        catch
+        {
+            quoteError = "Connection error. Please try again.";
+            toast?.ShowError("Connection error. Please try again.");
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private string GetTimeAgo(DateTime date)
+    {
+        var diff = DateTime.UtcNow - date;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes} minutes ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours} hours ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays} days ago";
+        return date.ToString("d MMM yyyy");
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/jobs");
+    private void GoToLogin() => Navigation.NavigateTo("/login");
+}

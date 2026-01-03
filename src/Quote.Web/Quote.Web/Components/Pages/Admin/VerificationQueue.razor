@@ -1,0 +1,464 @@
+@page "/admin/verifications"
+@using Quote.Shared.DTOs
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Verification Queue - Admin</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Verification Queue</h1>
+            <p class="text-muted mb-0">Review and approve tradie verification documents</p>
+        </div>
+        <button class="btn btn-outline-primary" @onclick="LoadVerifications">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle me-2"></i>@errorMessage
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    <!-- Stats Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100 bg-warning bg-opacity-10">
+                <div class="card-body text-center">
+                    <h3 class="text-warning mb-0">@totalPending</h3>
+                    <small class="text-muted">Total Pending</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h3 class="text-primary mb-0">@pendingIdentity</h3>
+                    <small class="text-muted">Identity</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h3 class="text-info mb-0">@pendingInsurance</h3>
+                    <small class="text-muted">Insurance</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h3 class="text-secondary mb-0">@pendingPolice</h3>
+                    <small class="text-muted">Police Check</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <ul class="nav nav-pills mb-4">
+        <li class="nav-item">
+            <button class="nav-link @(typeFilter == null ? "active" : "")" @onclick="() => FilterByType(null)">
+                All (@totalPending)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(typeFilter == "identity" ? "active" : "")" @onclick='() => FilterByType("identity")'>
+                Identity (@pendingIdentity)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(typeFilter == "insurance" ? "active" : "")" @onclick='() => FilterByType("insurance")'>
+                Insurance (@pendingInsurance)
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(typeFilter == "police" ? "active" : "")" @onclick='() => FilterByType("police")'>
+                Police Check (@pendingPolice)
+            </button>
+        </li>
+    </ul>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">Loading verifications...</p>
+        </div>
+    }
+    else if (!verifications.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <h5 class="mt-3">No pending verifications</h5>
+            <p class="text-muted">All caught up! Check back later for new submissions.</p>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tradie</th>
+                            <th>Type</th>
+                            <th>Document</th>
+                            <th>Submitted</th>
+                            <th>Waiting</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in verifications)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@item.TradieName</strong>
+                                    <br><small class="text-muted">@item.TradieEmail</small>
+                                    @if (!string.IsNullOrEmpty(item.BusinessName))
+                                    {
+                                        <br><small class="text-muted">@item.BusinessName</small>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge @GetTypeBadgeClass(item.VerificationType)">
+                                        @item.VerificationType
+                                    </span>
+                                </td>
+                                <td>
+                                    @item.DocumentType
+                                    @if (!string.IsNullOrEmpty(item.DocumentNumber))
+                                    {
+                                        <br><small class="text-muted">@item.DocumentNumber</small>
+                                    }
+                                </td>
+                                <td>
+                                    @item.SubmittedAt.ToString("dd MMM HH:mm")
+                                </td>
+                                <td>
+                                    <span class="@(item.DaysPending > 0 ? "text-danger fw-bold" : "text-success")">
+                                        @if (item.DaysPending > 0)
+                                        {
+                                            @($"{item.DaysPending} day(s)")
+                                        }
+                                        else
+                                        {
+                                            <text>Today</text>
+                                        }
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-primary" @onclick="() => OpenReviewModal(item)">
+                                        <i class="bi bi-eye me-1"></i>Review
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        @if (totalPages > 1)
+        {
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(currentPage - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= totalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(currentPage == pageNum ? "active" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(currentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+</div>
+
+<!-- Review Modal -->
+@if (showReviewModal && selectedItem != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Review Verification</h5>
+                    <button type="button" class="btn-close" @onclick="CloseReviewModal" disabled="@isSubmitting"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6>Tradie Details</h6>
+                            <p class="mb-1"><strong>@selectedItem.TradieName</strong></p>
+                            <p class="mb-1 text-muted">@selectedItem.TradieEmail</p>
+                            @if (!string.IsNullOrEmpty(selectedItem.BusinessName))
+                            {
+                                <p class="mb-0 text-muted">@selectedItem.BusinessName</p>
+                            }
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Document Details</h6>
+                            <p class="mb-1"><span class="badge @GetTypeBadgeClass(selectedItem.VerificationType)">@selectedItem.VerificationType</span></p>
+                            <p class="mb-1">Type: @selectedItem.DocumentType</p>
+                            @if (!string.IsNullOrEmpty(selectedItem.DocumentNumber))
+                            {
+                                <p class="mb-1">Number: @selectedItem.DocumentNumber</p>
+                            }
+                            @if (!string.IsNullOrEmpty(selectedItem.IssuingState))
+                            {
+                                <p class="mb-1">State: @selectedItem.IssuingState</p>
+                            }
+                            @if (selectedItem.ExpiryDate.HasValue)
+                            {
+                                <p class="mb-0">Expiry: @selectedItem.ExpiryDate.Value.ToString("dd MMM yyyy")</p>
+                            }
+                        </div>
+                    </div>
+
+                    <h6>Document Images</h6>
+                    <div class="row g-3 mb-4">
+                        @if (!string.IsNullOrEmpty(selectedItem.DocumentFrontUrl))
+                        {
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">Front</div>
+                                    <div class="card-body p-2">
+                                        <a href="@GetFullUrl(selectedItem.DocumentFrontUrl)" target="_blank">
+                                            <img src="@GetFullUrl(selectedItem.DocumentFrontUrl)" class="img-fluid rounded" alt="Front" style="max-height: 300px;">
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(selectedItem.DocumentBackUrl))
+                        {
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">Back</div>
+                                    <div class="card-body p-2">
+                                        <a href="@GetFullUrl(selectedItem.DocumentBackUrl)" target="_blank">
+                                            <img src="@GetFullUrl(selectedItem.DocumentBackUrl)" class="img-fluid rounded" alt="Back" style="max-height: 300px;">
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Notes (required for rejection)</label>
+                        <textarea class="form-control" rows="3" @bind="reviewNotes" placeholder="Add notes about your decision..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseReviewModal" disabled="@isSubmitting">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-danger" @onclick="() => SubmitReview(false)" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        <i class="bi bi-x-lg me-1"></i>Reject
+                    </button>
+                    <button type="button" class="btn btn-success" @onclick="() => SubmitReview(true)" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        <i class="bi bi-check-lg me-1"></i>Approve
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<PendingVerificationItemDto> verifications = new();
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private string? typeFilter;
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private int totalPending = 0;
+    private int pendingIdentity = 0;
+    private int pendingInsurance = 0;
+    private int pendingPolice = 0;
+    private string? errorMessage;
+    private string? successMessage;
+
+    // Review modal
+    private bool showReviewModal = false;
+    private PendingVerificationItemDto? selectedItem;
+    private string? reviewNotes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStats();
+        await LoadVerifications();
+    }
+
+    private async Task LoadStats()
+    {
+        try
+        {
+            var stats = await Http.GetFromJsonAsync<VerificationStats>("api/admin/verifications/stats");
+            if (stats != null)
+            {
+                pendingIdentity = stats.PendingIdentity;
+                pendingInsurance = stats.PendingInsurance;
+                pendingPolice = stats.PendingPoliceCheck;
+                totalPending = stats.TotalPending;
+            }
+        }
+        catch { }
+    }
+
+    private async Task LoadVerifications()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var url = $"api/admin/verifications/pending?page={currentPage}&pageSize=20";
+            if (!string.IsNullOrEmpty(typeFilter))
+            {
+                url += $"&type={typeFilter}";
+            }
+
+            var response = await Http.GetFromJsonAsync<PendingVerificationsListDto>(url);
+            if (response != null)
+            {
+                verifications = response.Items;
+                totalPages = response.TotalPages;
+            }
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            errorMessage = "Access denied. You must be an admin to view this page.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load verifications: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task FilterByType(string? type)
+    {
+        typeFilter = type;
+        currentPage = 1;
+        await LoadVerifications();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        await LoadVerifications();
+    }
+
+    private void OpenReviewModal(PendingVerificationItemDto item)
+    {
+        selectedItem = item;
+        reviewNotes = null;
+        showReviewModal = true;
+    }
+
+    private void CloseReviewModal()
+    {
+        showReviewModal = false;
+        selectedItem = null;
+        reviewNotes = null;
+    }
+
+    private async Task SubmitReview(bool approved)
+    {
+        if (selectedItem == null) return;
+
+        if (!approved && string.IsNullOrWhiteSpace(reviewNotes))
+        {
+            errorMessage = "Please provide notes explaining the rejection reason.";
+            return;
+        }
+
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            var request = new ReviewVerificationRequest { Approved = approved, Notes = reviewNotes };
+            var response = await Http.PostAsJsonAsync($"api/admin/verifications/{selectedItem.Id}/review", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ReviewVerificationResponseDto>();
+                successMessage = $"Verification {(approved ? "approved" : "rejected")} for {result?.TradieName}";
+                CloseReviewModal();
+                await LoadStats();
+                await LoadVerifications();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to submit review: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private string GetTypeBadgeClass(string type) => type.ToLower() switch
+    {
+        "identity" => "bg-primary",
+        "insurance" => "bg-info",
+        "police check" => "bg-secondary",
+        _ => "bg-dark"
+    };
+
+    private string GetFullUrl(string url)
+    {
+        if (url.StartsWith("http")) return url;
+        return $"{Navigation.BaseUri.TrimEnd('/')}{url}";
+    }
+
+    private class VerificationStats
+    {
+        public int PendingIdentity { get; set; }
+        public int PendingInsurance { get; set; }
+        public int PendingPoliceCheck { get; set; }
+        public int TotalPending { get; set; }
+    }
+}

@@ -1,0 +1,243 @@
+@page "/jobs/create"
+@inject JobService JobService
+@inject AuthStateService AuthState
+@inject NavigationManager Navigation
+
+
+<PageTitle>Post a Job - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4 p-md-5">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                        <div>
+                            <p class="text-uppercase text-muted fw-semibold small mb-1">Create job</p>
+                            <h2 class="mb-0">Tell us about your project</h2>
+                        </div>
+                        <span class="badge bg-light text-dark align-self-center">Step 1 of 1</span>
+                    </div>
+
+                    @if (!AuthState.IsAuthenticated)
+                    {
+                        <div class="alert alert-warning">
+                            <p>Please <a href="/login">sign in</a> or <a href="/register?type=customer">create an account</a> to post a job.</p>
+                        </div>
+                    }
+                    else if (!AuthState.IsCustomer)
+                    {
+                        <div class="alert alert-warning">
+                            <p>Only customers can post jobs. You're signed in as a tradie.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger">@errorMessage</div>
+                        }
+
+                        <EditForm Model="jobModel" OnValidSubmit="HandleSubmit">
+                            <DataAnnotationsValidator />
+
+                            <div class="form-section">
+                                <label class="form-label">What type of work do you need?</label>
+                                <select class="form-select" @bind="jobModel.TradeCategoryId">
+                                    <option value="">Select a trade...</option>
+                                    @foreach (var cat in categories)
+                                    {
+                                        <option value="@cat.Id">@cat.Icon @cat.Name</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => jobModel.TradeCategoryId)" class="text-danger" />
+                            </div>
+
+                            <div class="form-section">
+                                <div class="mb-3">
+                                    <label class="form-label">Job Title</label>
+                                    <InputText @bind-Value="jobModel.Title" class="form-control"
+                                               placeholder="e.g., Fix leaking tap in bathroom" />
+                                    <ValidationMessage For="@(() => jobModel.Title)" class="text-danger" />
+                                </div>
+                                <div>
+                                    <label class="form-label">Description</label>
+                                    <InputTextArea @bind-Value="jobModel.Description" class="form-control" rows="4"
+                                                   placeholder="Describe the work needed in detail..." />
+                                    <ValidationMessage For="@(() => jobModel.Description)" class="text-danger" />
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="mb-0">Location</h5>
+                                    <small class="muted-hint">Share where the work will happen.</small>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Suburb</label>
+                                        <InputText @bind-Value="jobModel.SuburbName" class="form-control"
+                                                   placeholder="e.g., Sydney CBD" />
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">State</label>
+                                        <select class="form-select" @bind="jobModel.State">
+                                            <option value="NSW">NSW</option>
+                                            <option value="VIC">VIC</option>
+                                            <option value="QLD">QLD</option>
+                                            <option value="WA">WA</option>
+                                            <option value="SA">SA</option>
+                                            <option value="TAS">TAS</option>
+                                            <option value="ACT">ACT</option>
+                                            <option value="NT">NT</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 mb-3">
+                                        <label class="form-label">Postcode</label>
+                                        <InputText @bind-Value="jobModel.Postcode" class="form-control" placeholder="2000" />
+                                    </div>
+                                </div>
+                                <div class="mb-0">
+                                    <label class="form-label">Property Type</label>
+                                    <select class="form-select" @bind="jobModel.PropertyType">
+                                        <option value="House">House</option>
+                                        <option value="Unit">Unit / Apartment</option>
+                                        <option value="Townhouse">Townhouse</option>
+                                        <option value="Commercial">Commercial</option>
+                                        <option value="Industrial">Industrial</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="mb-0">Budget (Optional)</h5>
+                                    <small class="muted-hint">Give tradies a range to quote accurately.</small>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3 mb-md-0">
+                                        <label class="form-label">Minimum Budget</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">$</span>
+                                            <InputNumber @bind-Value="jobModel.BudgetMin" class="form-control" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Maximum Budget</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">$</span>
+                                            <InputNumber @bind-Value="jobModel.BudgetMax" class="form-control" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="mb-0">Timing (Optional)</h5>
+                                    <small class="muted-hint">Add dates if you have a target schedule.</small>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3 mb-md-0">
+                                        <label class="form-label">Preferred Start Date</label>
+                                        <InputDate @bind-Value="jobModel.PreferredStartDate" class="form-control" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Preferred End Date</label>
+                                        <InputDate @bind-Value="jobModel.PreferredEndDate" class="form-control" />
+                                    </div>
+                                </div>
+                                <div class="form-check mt-3">
+                                    <InputCheckbox @bind-Value="jobModel.IsFlexibleDates" class="form-check-input" id="flexibleDates" />
+                                    <label class="form-check-label" for="flexibleDates">
+                                        I'm flexible with dates
+                                    </label>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-lg w-100" disabled="@isLoading">
+                                @if (isLoading)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Post Job
+                            </button>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private JobModel jobModel = new() { State = "NSW", PropertyType = "House" };
+    private List<TradeCategoryDto> categories = new();
+    private bool isLoading = false;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        categories = await JobService.GetTradeCategoriesAsync();
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (string.IsNullOrEmpty(jobModel.TradeCategoryId))
+        {
+            errorMessage = "Please select a trade category";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+
+        var request = new CreateJobRequest(
+            Guid.Parse(jobModel.TradeCategoryId),
+            jobModel.Title,
+            jobModel.Description,
+            jobModel.BudgetMin,
+            jobModel.BudgetMax,
+            jobModel.PreferredStartDate,
+            jobModel.PreferredEndDate,
+            jobModel.IsFlexibleDates,
+            -33.8688, // Default Sydney coordinates
+            151.2093,
+            jobModel.SuburbName,
+            jobModel.State,
+            jobModel.Postcode,
+            jobModel.PropertyType
+        );
+
+        var (success, error) = await JobService.CreateJobAsync(request);
+
+        if (success)
+        {
+            Navigation.NavigateTo("/jobs");
+        }
+        else
+        {
+            errorMessage = error ?? "Failed to create job. Please try again.";
+        }
+
+        isLoading = false;
+    }
+
+    public class JobModel
+    {
+        public string? TradeCategoryId { get; set; }
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string SuburbName { get; set; } = "";
+        public string State { get; set; } = "NSW";
+        public string Postcode { get; set; } = "";
+        public string PropertyType { get; set; } = "House";
+        public decimal? BudgetMin { get; set; }
+        public decimal? BudgetMax { get; set; }
+        public DateTime? PreferredStartDate { get; set; }
+        public DateTime? PreferredEndDate { get; set; }
+        public bool IsFlexibleDates { get; set; }
+    }
+}

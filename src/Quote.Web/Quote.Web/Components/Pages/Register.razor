@@ -1,0 +1,170 @@
+@page "/register"
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+
+<PageTitle>Register - Quote</PageTitle>
+
+<div class="container py-5">
+    <div class="auth-wrapper">
+        <div class="auth-card card">
+            <div class="card-body p-4 p-md-5">
+                <div class="text-center mb-4">
+                    <h2 class="fw-bold mb-1">Create your account</h2>
+                    <p class="text-muted mb-0">Choose your role and get started in minutes.</p>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+
+                <EditForm Model="registerModel" OnValidSubmit="HandleRegister">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label class="form-label">I am a...</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="userType" id="customer"
+                                   checked="@(registerModel.UserType == "Customer")"
+                                   @onchange="@(() => registerModel.UserType = "Customer")" />
+                            <label class="btn btn-outline-primary" for="customer">Homeowner / Customer</label>
+
+                            <input type="radio" class="btn-check" name="userType" id="tradie"
+                                   checked="@(registerModel.UserType == "Tradie")"
+                                   @onchange="@(() => registerModel.UserType = "Tradie")" />
+                            <label class="btn btn-outline-primary" for="tradie">Tradie / Professional</label>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">First Name</label>
+                            <InputText @bind-Value="registerModel.FirstName" class="form-control" />
+                            <ValidationMessage For="@(() => registerModel.FirstName)" class="text-danger" />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Last Name</label>
+                            <InputText @bind-Value="registerModel.LastName" class="form-control" />
+                            <ValidationMessage For="@(() => registerModel.LastName)" class="text-danger" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <InputText @bind-Value="registerModel.Email" class="form-control" placeholder="you@example.com" />
+                        <ValidationMessage For="@(() => registerModel.Email)" class="text-danger" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Phone (optional)</label>
+                        <InputText @bind-Value="registerModel.Phone" class="form-control" placeholder="04XX XXX XXX" />
+                    </div>
+
+                    @if (registerModel.UserType == "Tradie")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">ABN (optional)</label>
+                            <InputText @bind-Value="registerModel.ABN" class="form-control" placeholder="XX XXX XXX XXX" />
+                            <small class="text-muted">Your Australian Business Number</small>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <InputText @bind-Value="registerModel.Password" type="password" class="form-control" />
+                        <ValidationMessage For="@(() => registerModel.Password)" class="text-danger" />
+                        <small class="text-muted">Minimum 8 characters</small>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">Confirm Password</label>
+                        <InputText @bind-Value="registerModel.ConfirmPassword" type="password" class="form-control" />
+                        @if (registerModel.Password != registerModel.ConfirmPassword && !string.IsNullOrEmpty(registerModel.ConfirmPassword))
+                        {
+                            <span class="text-danger">Passwords do not match</span>
+                        }
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Create Account
+                    </button>
+                </EditForm>
+
+                <hr class="my-4" />
+
+                <p class="text-center text-muted">
+                    Already have an account? <a href="/login">Sign in here</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private RegisterModel registerModel = new() { UserType = "Customer" };
+    private bool isLoading = false;
+    private string? errorMessage;
+
+    [SupplyParameterFromQuery]
+    public string? Type { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Type?.ToLower() == "tradie")
+        {
+            registerModel.UserType = "Tradie";
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        if (registerModel.Password != registerModel.ConfirmPassword)
+        {
+            errorMessage = "Passwords do not match";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+
+        var request = new RegisterRequest(
+            registerModel.Email,
+            registerModel.Password,
+            registerModel.FirstName,
+            registerModel.LastName,
+            registerModel.UserType,
+            registerModel.Phone,
+            registerModel.ABN
+        );
+
+        var (success, error) = await AuthService.RegisterAsync(request);
+
+        if (success)
+        {
+            Navigation.NavigateTo("/");
+        }
+        else
+        {
+            errorMessage = error ?? "Registration failed. Please try again.";
+        }
+
+        isLoading = false;
+    }
+
+    public class RegisterModel
+    {
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string ConfirmPassword { get; set; } = "";
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string UserType { get; set; } = "Customer";
+        public string? Phone { get; set; }
+        public string? ABN { get; set; }
+    }
+}

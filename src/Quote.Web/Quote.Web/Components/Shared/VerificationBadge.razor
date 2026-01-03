@@ -1,0 +1,64 @@
+@using Quote.Shared.DTOs
+
+<div class="verification-badges d-flex flex-wrap gap-2">
+    @if (Status?.IsLicensed == true)
+    {
+        <span class="badge bg-success-subtle text-success border border-success-subtle">
+            <i class="bi bi-patch-check-fill me-1"></i>Licensed
+        </span>
+    }
+    @if (Status?.IsInsured == true)
+    {
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+            <i class="bi bi-shield-check me-1"></i>Insured
+        </span>
+    }
+    @if (Status?.IsPoliceChecked == true)
+    {
+        <span class="badge bg-info-subtle text-info border border-info-subtle">
+            <i class="bi bi-person-check-fill me-1"></i>Police Checked
+        </span>
+    }
+    @if (Status?.HasValidSubscription == true)
+    {
+        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+            <i class="bi bi-star-fill me-1"></i>Pro
+        </span>
+    }
+</div>
+
+@if (ShowLevel && !string.IsNullOrEmpty(Status?.VerificationLevel))
+{
+    <div class="mt-2">
+        <span class="@GetLevelClass()">
+            <i class="bi @GetLevelIcon() me-1"></i>@Status.VerificationLevel Verified
+        </span>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public VerificationStatusDto? Status { get; set; }
+
+    [Parameter]
+    public bool ShowLevel { get; set; } = false;
+
+    [Parameter]
+    public bool Compact { get; set; } = false;
+
+    private string GetLevelClass() => Status?.VerificationLevel switch
+    {
+        "Premium" => "text-warning fw-bold",
+        "Verified" => "text-success fw-bold",
+        "Basic" => "text-primary",
+        _ => "text-muted"
+    };
+
+    private string GetLevelIcon() => Status?.VerificationLevel switch
+    {
+        "Premium" => "bi-award-fill",
+        "Verified" => "bi-patch-check-fill",
+        "Basic" => "bi-check-circle",
+        _ => "bi-dash-circle"
+    };
+}

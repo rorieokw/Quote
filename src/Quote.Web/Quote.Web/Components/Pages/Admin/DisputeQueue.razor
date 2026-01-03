@@ -1,0 +1,548 @@
+@page "/admin/disputes"
+@using Quote.Shared.DTOs
+@using Quote.Web.Client.Services
+@inject DisputeService DisputeService
+@inject NavigationManager Navigation
+
+<PageTitle>Dispute Queue - Admin</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Dispute Queue</h1>
+            <p class="text-muted mb-0">Review and resolve customer/tradie disputes</p>
+        </div>
+        <button class="btn btn-outline-primary" @onclick="LoadDisputes">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle me-2"></i>@errorMessage
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    <!-- Stats Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100 bg-warning bg-opacity-10">
+                <div class="card-body text-center">
+                    <h3 class="text-warning mb-0">@openCount</h3>
+                    <small class="text-muted">Open</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100 bg-info bg-opacity-10">
+                <div class="card-body text-center">
+                    <h3 class="text-info mb-0">@underReviewCount</h3>
+                    <small class="text-muted">Under Review</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100 bg-success bg-opacity-10">
+                <div class="card-body text-center">
+                    <h3 class="text-success mb-0">@resolvedCount</h3>
+                    <small class="text-muted">Resolved</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h3 class="text-secondary mb-0">@totalCount</h3>
+                    <small class="text-muted">Total</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <select class="form-select" @bind="statusFilter" @bind:after="LoadDisputes">
+                <option value="">All Statuses</option>
+                <option value="Open">Open</option>
+                <option value="UnderReview">Under Review</option>
+                <option value="Resolved">Resolved</option>
+                <option value="Closed">Closed</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" @bind="reasonFilter" @bind:after="LoadDisputes">
+                <option value="">All Reasons</option>
+                <option value="WorkQuality">Work Quality</option>
+                <option value="NonCompletion">Non-Completion</option>
+                <option value="PaymentIssue">Payment Issue</option>
+                <option value="Communication">Communication</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">Loading disputes...</p>
+        </div>
+    }
+    else if (!disputes.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <h5 class="mt-3">No disputes found</h5>
+            <p class="text-muted">No disputes match your current filters.</p>
+        </div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Job</th>
+                            <th>Filed By</th>
+                            <th>Reason</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Filed</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var dispute in disputes)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@dispute.JobTitle</strong>
+                                </td>
+                                <td>
+                                    @dispute.RaisedByName
+                                    <br><span class="badge @(dispute.RaisedByType == "Customer" ? "bg-primary" : "bg-success")">@dispute.RaisedByType</span>
+                                </td>
+                                <td>
+                                    <span class="badge @GetReasonBadgeClass(dispute.Reason)">@dispute.Reason</span>
+                                </td>
+                                <td>
+                                    $@dispute.QuoteAmount.ToString("N0")
+                                </td>
+                                <td>
+                                    <span class="badge @GetStatusBadgeClass(dispute.Status)">@dispute.Status</span>
+                                </td>
+                                <td>
+                                    @dispute.CreatedAt.ToString("dd MMM")
+                                    <br><small class="text-muted">@GetTimeAgo(dispute.CreatedAt)</small>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-primary" @onclick="() => OpenReviewModal(dispute)">
+                                        <i class="bi bi-eye me-1"></i>Review
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        @if (totalPages > 1)
+        {
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(currentPage - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= totalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(currentPage == pageNum ? "active" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(currentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+</div>
+
+<!-- Review Modal -->
+@if (showReviewModal && selectedDispute != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                        Dispute Review
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseReviewModal" disabled="@isSubmitting"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Job & Parties Info -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-2">Job Details</h6>
+                            <p class="mb-1"><strong>@selectedDispute.JobTitle</strong></p>
+                            <p class="mb-0">Quote Amount: <strong class="text-success">$@selectedDispute.QuoteAmount.ToString("N2")</strong></p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-2">Parties Involved</h6>
+                            <p class="mb-1">
+                                Filed by: <strong>@selectedDispute.RaisedByName</strong>
+                                <span class="badge @(selectedDispute.RaisedByType == "Customer" ? "bg-primary" : "bg-success") ms-1">@selectedDispute.RaisedByType</span>
+                            </p>
+                            @if (!string.IsNullOrEmpty(selectedDispute.OtherPartyName))
+                            {
+                                <p class="mb-0">Other party: <strong>@selectedDispute.OtherPartyName</strong></p>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Dispute Details -->
+                    <div class="card bg-light mb-4">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge @GetReasonBadgeClass(selectedDispute.Reason) fs-6">@selectedDispute.Reason</span>
+                                <span class="badge @GetStatusBadgeClass(selectedDispute.Status)">@selectedDispute.Status</span>
+                            </div>
+                            <p class="mb-0">@selectedDispute.Description</p>
+                            <small class="text-muted">Filed @selectedDispute.CreatedAt.ToString("dd MMM yyyy HH:mm")</small>
+                        </div>
+                    </div>
+
+                    <!-- Evidence -->
+                    @if (selectedDispute.Evidence.Any())
+                    {
+                        <h6 class="mb-3">Evidence (@selectedDispute.Evidence.Count files)</h6>
+                        <div class="row g-2 mb-4">
+                            @foreach (var evidence in selectedDispute.Evidence)
+                            {
+                                <div class="col-md-4">
+                                    <div class="card">
+                                        <div class="card-body p-2">
+                                            <a href="@evidence.FileUrl" target="_blank" class="text-decoration-none">
+                                                <i class="bi bi-file-earmark me-1"></i>@evidence.FileName
+                                            </a>
+                                            @if (!string.IsNullOrEmpty(evidence.Description))
+                                            {
+                                                <br><small class="text-muted">@evidence.Description</small>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (selectedDispute.Status != "Resolved" && selectedDispute.Status != "Closed")
+                    {
+                        <hr />
+                        <h6 class="mb-3">Resolution</h6>
+
+                        <div class="mb-3">
+                            <label class="form-label">Decision <span class="text-danger">*</span></label>
+                            <select class="form-select" @bind="resolutionType">
+                                <option value="">Select decision...</option>
+                                <option value="FullRefund">Full Refund</option>
+                                <option value="PartialRefund">Partial Refund</option>
+                                <option value="NoRefund">No Refund (Favor Tradie)</option>
+                                <option value="Dismissed">Dismiss Case</option>
+                            </select>
+                        </div>
+
+                        @if (resolutionType == "PartialRefund")
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Refund Amount <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" @bind="refundAmount" step="0.01" max="@selectedDispute.QuoteAmount" />
+                                </div>
+                                <small class="text-muted">Maximum: $@selectedDispute.QuoteAmount.ToString("N2")</small>
+                            </div>
+                        }
+
+                        @if (resolutionType == "FullRefund")
+                        {
+                            <div class="alert alert-info mb-3">
+                                <i class="bi bi-info-circle me-2"></i>
+                                Full refund of <strong>$@selectedDispute.QuoteAmount.ToString("N2")</strong> will be issued to the customer.
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Resolution Notes <span class="text-danger">*</span></label>
+                            <textarea class="form-control" rows="3" @bind="resolutionNotes" placeholder="Explain your decision..."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Admin Notes (internal)</label>
+                            <textarea class="form-control" rows="2" @bind="adminNotes" placeholder="Internal notes..."></textarea>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary">
+                            <h6>Resolution</h6>
+                            @if (!string.IsNullOrEmpty(selectedDispute.ResolutionType))
+                            {
+                                <p class="mb-1">Decision: <strong>@selectedDispute.ResolutionType</strong></p>
+                            }
+                            @if (selectedDispute.RefundAmount.HasValue)
+                            {
+                                <p class="mb-1">Refund: <strong>$@selectedDispute.RefundAmount.Value.ToString("N2")</strong></p>
+                            }
+                            @if (!string.IsNullOrEmpty(selectedDispute.Resolution))
+                            {
+                                <p class="mb-1">Notes: @selectedDispute.Resolution</p>
+                            }
+                            @if (!string.IsNullOrEmpty(selectedDispute.ResolvedByName))
+                            {
+                                <p class="mb-0 text-muted">Resolved by @selectedDispute.ResolvedByName on @selectedDispute.ResolvedAt?.ToString("dd MMM yyyy")</p>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseReviewModal" disabled="@isSubmitting">
+                        Close
+                    </button>
+                    @if (selectedDispute.Status != "Resolved" && selectedDispute.Status != "Closed")
+                    {
+                        <button type="button" class="btn btn-outline-warning" @onclick="CloseDisputeWithoutResolution" disabled="@isSubmitting">
+                            <i class="bi bi-x-lg me-1"></i>Close Without Action
+                        </button>
+                        <button type="button" class="btn btn-success" @onclick="SubmitResolution" disabled="@isSubmitting">
+                            @if (isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            <i class="bi bi-check-lg me-1"></i>Resolve
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DisputeDto> disputes = new();
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private string statusFilter = "";
+    private string reasonFilter = "";
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private int totalCount = 0;
+    private int openCount = 0;
+    private int underReviewCount = 0;
+    private int resolvedCount = 0;
+    private string? errorMessage;
+    private string? successMessage;
+
+    // Review modal
+    private bool showReviewModal = false;
+    private DisputeDto? selectedDispute;
+    private string resolutionType = "";
+    private decimal refundAmount = 0;
+    private string resolutionNotes = "";
+    private string adminNotes = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDisputes();
+    }
+
+    private async Task LoadDisputes()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var response = await DisputeService.GetAllDisputesAsync(
+                string.IsNullOrEmpty(statusFilter) ? null : statusFilter,
+                string.IsNullOrEmpty(reasonFilter) ? null : reasonFilter,
+                currentPage,
+                20
+            );
+
+            if (response != null)
+            {
+                disputes = response.Disputes;
+                totalCount = response.TotalCount;
+                totalPages = (int)Math.Ceiling(totalCount / 20.0);
+
+                // Calculate stats
+                openCount = disputes.Count(d => d.Status == "Open");
+                underReviewCount = disputes.Count(d => d.Status == "UnderReview");
+                resolvedCount = disputes.Count(d => d.Status == "Resolved");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load disputes: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        await LoadDisputes();
+    }
+
+    private void OpenReviewModal(DisputeDto dispute)
+    {
+        selectedDispute = dispute;
+        resolutionType = "";
+        refundAmount = 0;
+        resolutionNotes = "";
+        adminNotes = "";
+        showReviewModal = true;
+    }
+
+    private void CloseReviewModal()
+    {
+        showReviewModal = false;
+        selectedDispute = null;
+    }
+
+    private async Task SubmitResolution()
+    {
+        if (selectedDispute == null) return;
+
+        if (string.IsNullOrEmpty(resolutionType))
+        {
+            errorMessage = "Please select a resolution decision.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(resolutionNotes))
+        {
+            errorMessage = "Please provide resolution notes.";
+            return;
+        }
+
+        if (resolutionType == "PartialRefund" && refundAmount <= 0)
+        {
+            errorMessage = "Please enter a valid refund amount.";
+            return;
+        }
+
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            var request = new ResolveDisputeRequest(
+                resolutionType,
+                resolutionNotes,
+                resolutionType == "PartialRefund" ? refundAmount : null,
+                string.IsNullOrWhiteSpace(adminNotes) ? null : adminNotes
+            );
+
+            var success = await DisputeService.ResolveDisputeAsync(selectedDispute.Id, request);
+
+            if (success)
+            {
+                successMessage = $"Dispute resolved successfully with {resolutionType}";
+                CloseReviewModal();
+                await LoadDisputes();
+            }
+            else
+            {
+                errorMessage = "Failed to resolve dispute. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task CloseDisputeWithoutResolution()
+    {
+        if (selectedDispute == null) return;
+
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            var success = await DisputeService.CloseDisputeAsync(selectedDispute.Id, "Closed by admin without action");
+
+            if (success)
+            {
+                successMessage = "Dispute closed without action.";
+                CloseReviewModal();
+                await LoadDisputes();
+            }
+            else
+            {
+                errorMessage = "Failed to close dispute. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private string GetStatusBadgeClass(string status) => status switch
+    {
+        "Open" => "bg-warning text-dark",
+        "UnderReview" => "bg-info",
+        "Resolved" => "bg-success",
+        "Closed" => "bg-secondary",
+        _ => "bg-dark"
+    };
+
+    private string GetReasonBadgeClass(string reason) => reason switch
+    {
+        "WorkQuality" => "bg-danger",
+        "NonCompletion" => "bg-warning text-dark",
+        "PaymentIssue" => "bg-info",
+        "Communication" => "bg-secondary",
+        _ => "bg-dark"
+    };
+
+    private string GetTimeAgo(DateTime date)
+    {
+        var diff = DateTime.UtcNow - date;
+        if (diff.TotalDays >= 1) return $"{(int)diff.TotalDays}d ago";
+        if (diff.TotalHours >= 1) return $"{(int)diff.TotalHours}h ago";
+        return "Just now";
+    }
+}

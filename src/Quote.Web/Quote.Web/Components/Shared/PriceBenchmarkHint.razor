@@ -1,0 +1,149 @@
+@using Quote.Shared.DTOs
+
+@if (IsLoading)
+{
+    <div class="card border-info bg-light mb-3">
+        <div class="card-body d-flex align-items-center gap-2 py-3">
+            <div class="spinner-border spinner-border-sm text-info" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="text-muted">Loading market data...</span>
+        </div>
+    </div>
+}
+else if (Benchmark != null)
+{
+    <div class="card border-info mb-3" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-graph-up-arrow text-info fs-5"></i>
+                <span class="fw-semibold text-info">Market Pricing</span>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-body-secondary">
+                    @Benchmark.TradeCategoryName@(string.IsNullOrEmpty(Benchmark.Location) ? "" : $" in {Benchmark.Location}"):
+                </span>
+                <span class="fw-semibold text-info">
+                    $@Benchmark.MinPrice.ToString("N0") - $@Benchmark.MaxPrice.ToString("N0")
+                </span>
+            </div>
+
+            <div class="d-flex align-items-center gap-2 small text-body-secondary mb-3">
+                <span>Average: <strong class="text-info">$@Benchmark.AveragePrice.ToString("N0")</strong></span>
+                <span class="text-muted">(@Benchmark.SampleSize quotes)</span>
+            </div>
+
+            @if (YourPrice > 0)
+            {
+                var percentDiff = CalculatePercentageDifference();
+                var rating = GetRating(percentDiff);
+                var badgeClass = GetBadgeClass(rating);
+                var iconClass = GetRatingIcon(rating);
+
+                <div class="border-top border-info-subtle pt-3">
+                    <div class="mb-2">
+                        <span class="text-body-secondary">Your price: </span>
+                        <strong>$@YourPrice.ToString("N0")</strong>
+                    </div>
+
+                    <div class="position-relative mb-3">
+                        <div class="price-bar rounded" style="height: 10px; background: linear-gradient(90deg, #198754 0%, #ffc107 50%, #dc3545 100%);">
+                            <div class="price-marker position-absolute rounded-circle bg-white border border-dark border-3"
+                                 style="width: 18px; height: 18px; top: -4px; left: @GetMarkerPosition()%; transform: translateX(-50%); box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <small class="text-muted">$@Benchmark.MinPrice.ToString("N0")</small>
+                            <small class="text-muted">$@Benchmark.MaxPrice.ToString("N0")</small>
+                        </div>
+                    </div>
+
+                    <span class="badge @badgeClass d-inline-flex align-items-center gap-1 px-3 py-2">
+                        <i class="bi @iconClass"></i>
+                        <span>@rating</span>
+                        <span class="opacity-75">@(percentDiff >= 0 ? "+" : "")@percentDiff.ToString("N0")%</span>
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+}
+else if (NoDataAvailable)
+{
+    <div class="card bg-light mb-3">
+        <div class="card-body d-flex align-items-center gap-2 py-3">
+            <i class="bi bi-bar-chart text-muted"></i>
+            <span class="text-muted small">Not enough market data for this area yet</span>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public PriceBenchmarkDto? Benchmark { get; set; }
+
+    [Parameter]
+    public decimal YourPrice { get; set; }
+
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    [Parameter]
+    public bool NoDataAvailable { get; set; }
+
+    private decimal CalculatePercentageDifference()
+    {
+        if (Benchmark == null || Benchmark.AveragePrice == 0) return 0;
+        return Math.Round(((YourPrice - Benchmark.AveragePrice) / Benchmark.AveragePrice) * 100, 1);
+    }
+
+    private string GetRating(decimal percentDiff)
+    {
+        return percentDiff switch
+        {
+            > 20 => "Premium",
+            > 5 => "Above Market",
+            >= -5 => "At Market",
+            >= -20 => "Below Market",
+            _ => "Budget"
+        };
+    }
+
+    private string GetBadgeClass(string rating)
+    {
+        return rating switch
+        {
+            "Premium" => "bg-purple text-white",
+            "Above Market" => "bg-primary text-white",
+            "At Market" => "bg-success text-white",
+            "Below Market" => "bg-warning text-dark",
+            _ => "bg-secondary text-white"
+        };
+    }
+
+    private string GetRatingIcon(string rating)
+    {
+        return rating switch
+        {
+            "Premium" => "bi-gem",
+            "Above Market" => "bi-arrow-up-circle",
+            "At Market" => "bi-check-circle",
+            "Below Market" => "bi-arrow-down-circle",
+            _ => "bi-tag"
+        };
+    }
+
+    private double GetMarkerPosition()
+    {
+        if (Benchmark == null) return 50;
+
+        var range = Benchmark.MaxPrice - Benchmark.MinPrice;
+        if (range == 0) return 50;
+
+        var position = (double)((YourPrice - Benchmark.MinPrice) / range) * 100;
+
+        // Clamp to 0-100
+        return Math.Max(0, Math.Min(100, position));
+    }
+}

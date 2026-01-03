@@ -1,0 +1,107 @@
+@inject IJSRuntime JS
+
+<div class="voice-input-container">
+    <div class="input-group">
+        <textarea @bind="Text" @bind:event="oninput"
+                  class="form-control @(isListening ? "border-danger" : "")"
+                  placeholder="@Placeholder"
+                  rows="@Rows"></textarea>
+        <button type="button"
+                class="btn @(isListening ? "btn-danger" : "btn-outline-secondary")"
+                @onclick="ToggleListening"
+                disabled="@(!isSupported)">
+            <i class="bi @(isListening ? "bi-mic-fill" : "bi-mic")"></i>
+        </button>
+    </div>
+    @if (isListening)
+    {
+        <div class="mt-1">
+            <small class="text-danger">
+                <i class="bi bi-record-circle-fill me-1"></i>Listening...
+            </small>
+        </div>
+    }
+    @if (!isSupported)
+    {
+        <small class="text-muted">Voice input not supported in this browser</small>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string Text { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<string> TextChanged { get; set; }
+
+    [Parameter]
+    public string Placeholder { get; set; } = "Speak or type your notes...";
+
+    [Parameter]
+    public int Rows { get; set; } = 3;
+
+    private bool isListening = false;
+    private bool isSupported = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                isSupported = await JS.InvokeAsync<bool>("speechRecognition.isSupported");
+                StateHasChanged();
+            }
+            catch
+            {
+                isSupported = false;
+            }
+        }
+    }
+
+    private async Task ToggleListening()
+    {
+        if (!isSupported) return;
+
+        if (isListening)
+        {
+            await StopListening();
+        }
+        else
+        {
+            await StartListening();
+        }
+    }
+
+    private async Task StartListening()
+    {
+        isListening = true;
+        try
+        {
+            var result = await JS.InvokeAsync<string>("speechRecognition.start");
+            if (!string.IsNullOrEmpty(result))
+            {
+                Text = string.IsNullOrEmpty(Text) ? result : $"{Text} {result}";
+                await TextChanged.InvokeAsync(Text);
+            }
+        }
+        catch
+        {
+            // Speech recognition failed
+        }
+        finally
+        {
+            isListening = false;
+        }
+    }
+
+    private async Task StopListening()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("speechRecognition.stop");
+        }
+        catch { }
+        isListening = false;
+    }
+}

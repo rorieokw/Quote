@@ -1,0 +1,476 @@
+@page "/my-jobs/{JobId:guid}/compare"
+@inject JobService JobService
+@inject AuthStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Compare Quotes - Quote</PageTitle>
+
+<div class="container py-4">
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3 text-muted">Loading quotes...</p>
+        </div>
+    }
+    else if (comparison == null)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Unable to load quote comparison. Please try again.
+            <a href="/my-jobs" class="alert-link ms-2">Back to My Jobs</a>
+        </div>
+    }
+    else if (!comparison.Quotes.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-file-earmark-x display-1 text-muted"></i>
+            <h3 class="mt-3">No Quotes Yet</h3>
+            <p class="text-muted">You haven't received any quotes for this job yet.</p>
+            <a href="/my-jobs" class="btn btn-outline-primary">Back to My Jobs</a>
+        </div>
+    }
+    else
+    {
+        <!-- Header -->
+        <div class="mb-4">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/my-jobs">My Jobs</a></li>
+                    <li class="breadcrumb-item active">Compare Quotes</li>
+                </ol>
+            </nav>
+            <h2 class="mb-2">Compare Quotes</h2>
+            <p class="text-muted mb-0">
+                <strong>@comparison.JobTitle</strong> &bull;
+                @comparison.TradeCategory &bull;
+                @comparison.TotalQuotes quotes received
+            </p>
+            @if (comparison.BudgetMin.HasValue || comparison.BudgetMax.HasValue)
+            {
+                <p class="text-muted">
+                    <i class="bi bi-wallet2 me-1"></i>
+                    Budget: @FormatBudget(comparison.BudgetMin, comparison.BudgetMax)
+                </p>
+            }
+        </div>
+
+        <!-- Price Summary Bar -->
+        <div class="card mb-4 bg-light border-0">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <span class="text-muted small">Price Range</span>
+                                <div class="h5 mb-0">
+                                    @comparison.LowestPrice.ToString("C0") - @comparison.HighestPrice.ToString("C0")
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted small">Average Quote</span>
+                        <div class="h5 mb-0">@comparison.AveragePrice.ToString("C0")</div>
+                    </div>
+                    @if (comparison.MarketBenchmark != null)
+                    {
+                        <div class="col-md-4">
+                            <span class="text-muted small">Market Average</span>
+                            <div class="h5 mb-0 text-primary">
+                                @comparison.MarketBenchmark.AveragePrice.ToString("C0")
+                                <small class="text-muted">(@comparison.MarketBenchmark.SampleSize jobs)</small>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Sort Controls -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="btn-group" role="group">
+                <button class="btn @(sortBy == "price" && !sortDescending ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="SortByPriceLow">
+                    <i class="bi bi-sort-numeric-down me-1"></i>Price (Low)
+                </button>
+                <button class="btn @(sortBy == "price" && sortDescending ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="SortByPriceHigh">
+                    <i class="bi bi-sort-numeric-up me-1"></i>Price (High)
+                </button>
+                <button class="btn @(sortBy == "rating" ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="SortByRating">
+                    <i class="bi bi-star me-1"></i>Rating
+                </button>
+                <button class="btn @(sortBy == "experience" ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="SortByExperience">
+                    <i class="bi bi-award me-1"></i>Experience
+                </button>
+                <button class="btn @(sortBy == "date" ? "btn-primary" : "btn-outline-primary")"
+                        @onclick="SortByDate">
+                    <i class="bi bi-calendar me-1"></i>Start Date
+                </button>
+            </div>
+        </div>
+
+        <!-- Quote Cards Grid -->
+        <div class="row">
+            @foreach (var quote in comparison.Quotes)
+            {
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="card h-100 quote-comparison-card @(IsLowestPrice(quote) ? "border-success" : "")">
+                        @if (IsLowestPrice(quote))
+                        {
+                            <div class="ribbon-wrapper">
+                                <div class="ribbon bg-success">Best Price</div>
+                            </div>
+                        }
+
+                        <!-- Tradie Header -->
+                        <div class="card-header bg-white border-bottom-0 pb-0">
+                            <div class="d-flex align-items-center mb-3">
+                                @if (!string.IsNullOrEmpty(quote.TradiePhotoUrl))
+                                {
+                                    <img src="@quote.TradiePhotoUrl" class="rounded-circle me-3"
+                                         style="width: 60px; height: 60px; object-fit: cover;" alt="@quote.TradieName" />
+                                }
+                                else
+                                {
+                                    <div class="avatar-placeholder me-3">
+                                        @GetInitials(quote.TradieName)
+                                    </div>
+                                }
+                                <div>
+                                    <h6 class="mb-0">@(quote.TradieBusinessName ?? quote.TradieName)</h6>
+                                    @if (!string.IsNullOrEmpty(quote.TradieBusinessName))
+                                    {
+                                        <small class="text-muted">@quote.TradieName</small>
+                                    }
+                                    <div class="d-flex align-items-center">
+                                        <span class="text-warning me-1">
+                                            @for (int i = 0; i < 5; i++)
+                                            {
+                                                <i class="bi @(i < (int)quote.TradieRating ? "bi-star-fill" : (quote.TradieRating - i > 0 ? "bi-star-half" : "bi-star"))"></i>
+                                            }
+                                        </span>
+                                        <small class="text-muted">@quote.TradieRating.ToString("F1") (@quote.TradieReviewCount)</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Verification Badges -->
+                            <div class="mb-2">
+                                @if (quote.Verification.IsLicensed)
+                                {
+                                    <span class="badge bg-success-subtle text-success me-1" title="Licensed">
+                                        <i class="bi bi-patch-check-fill"></i> Licensed
+                                    </span>
+                                }
+                                @if (quote.Verification.IsInsured)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary me-1" title="Insured">
+                                        <i class="bi bi-shield-check"></i> Insured
+                                    </span>
+                                }
+                                @if (quote.Verification.IsPoliceChecked)
+                                {
+                                    <span class="badge bg-info-subtle text-info me-1" title="Police Checked">
+                                        <i class="bi bi-person-check"></i> Police Checked
+                                    </span>
+                                }
+                            </div>
+
+                            <!-- Stats -->
+                            <div class="d-flex text-muted small mb-2">
+                                <span class="me-3"><i class="bi bi-briefcase me-1"></i>@quote.TradieJobsCompleted jobs</span>
+                                <span><i class="bi bi-check-circle me-1"></i>@((quote.TradieCompletionRate * 100).ToString("F0"))% completion</span>
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            <!-- Price Section -->
+                            <div class="price-section mb-3">
+                                <div class="d-flex justify-content-between align-items-end mb-2">
+                                    <div>
+                                        <span class="h3 mb-0 text-dark">@quote.TotalCost.ToString("C0")</span>
+                                    </div>
+                                    <span class="badge @GetPriceRatingBadgeClass(quote.PriceRating)">
+                                        @quote.PriceRating
+                                    </span>
+                                </div>
+
+                                <!-- Price comparison bar -->
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar @GetPriceBarClass(quote)"
+                                         role="progressbar"
+                                         style="width: @GetPricePercentage(quote)%">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <small class="text-muted">@comparison.LowestPrice.ToString("C0")</small>
+                                    <small class="text-muted">@comparison.HighestPrice.ToString("C0")</small>
+                                </div>
+                            </div>
+
+                            <!-- Cost Breakdown -->
+                            <div class="breakdown mb-3">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span class="text-muted">Labour</span>
+                                    <span>@quote.LabourCost.ToString("C0")</span>
+                                </div>
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span class="text-muted">Materials</span>
+                                    <span>@quote.MaterialsCost.ToString("C0")</span>
+                                </div>
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span class="text-muted">Duration</span>
+                                    <span>@quote.EstimatedHours hrs</span>
+                                </div>
+                                @if (quote.ProposedStartDate.HasValue)
+                                {
+                                    <div class="d-flex justify-content-between small">
+                                        <span class="text-muted">Start Date</span>
+                                        <span>@quote.ProposedStartDate.Value.ToString("d MMM")</span>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- Deposit Info -->
+                            @if (quote.DepositRequired && quote.DepositAmount.HasValue)
+                            {
+                                <div class="alert alert-info py-2 small mb-3">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Deposit required: @quote.DepositAmount.Value.ToString("C0")
+                                </div>
+                            }
+
+                            <!-- Notes -->
+                            @if (!string.IsNullOrEmpty(quote.Notes))
+                            {
+                                <div class="notes-section mb-3">
+                                    <small class="text-muted d-block mb-1">Notes from tradie:</small>
+                                    <p class="small mb-0 @(expandedNotes.Contains(quote.QuoteId) ? "" : "text-truncate-3")">
+                                        @quote.Notes
+                                    </p>
+                                    @if (quote.Notes.Length > 100)
+                                    {
+                                        <button class="btn btn-link btn-sm p-0" @onclick="() => ToggleNotes(quote.QuoteId)">
+                                            @(expandedNotes.Contains(quote.QuoteId) ? "Show less" : "Show more")
+                                        </button>
+                                    }
+                                </div>
+                            }
+
+                            <!-- Valid Until -->
+                            <div class="small text-muted mb-3">
+                                <i class="bi bi-clock me-1"></i>
+                                Valid until @quote.ValidUntil.ToString("d MMM yyyy")
+                                @if (quote.ValidUntil < DateTime.UtcNow.AddDays(3))
+                                {
+                                    <span class="text-warning ms-1">(Expiring soon)</span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="card-footer bg-white border-top-0">
+                            <button class="btn btn-primary w-100" @onclick="() => AcceptQuote(quote.QuoteId)">
+                                <i class="bi bi-check-lg me-1"></i>Accept Quote
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .quote-comparison-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .quote-comparison-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+
+    .avatar-placeholder {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 1.2rem;
+    }
+
+    .text-truncate-3 {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .ribbon-wrapper {
+        position: absolute;
+        top: 10px;
+        right: -5px;
+        z-index: 1;
+    }
+
+    .ribbon {
+        padding: 4px 12px;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-radius: 4px 0 0 4px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .ribbon::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        right: 0;
+        border: 5px solid transparent;
+        border-top-color: #0d9f5f;
+        border-right-color: #0d9f5f;
+    }
+
+    .bg-success-subtle {
+        background-color: rgba(25, 135, 84, 0.1);
+    }
+
+    .bg-primary-subtle {
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+
+    .bg-info-subtle {
+        background-color: rgba(13, 202, 240, 0.1);
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Guid JobId { get; set; }
+
+    private QuoteComparisonResponse? comparison;
+    private bool isLoading = true;
+    private string sortBy = "price";
+    private bool sortDescending = false;
+    private HashSet<Guid> expandedNotes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+
+        if (!AuthState.IsAuthenticated || !AuthState.IsCustomer)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadComparison();
+    }
+
+    private async Task LoadComparison()
+    {
+        isLoading = true;
+        comparison = await JobService.GetQuotesForComparisonAsync(JobId, sortBy, sortDescending);
+        isLoading = false;
+    }
+
+    private async Task SortQuotes(string sort, bool descending)
+    {
+        if (sortBy == sort && sortDescending == descending)
+            return;
+
+        sortBy = sort;
+        sortDescending = descending;
+        await LoadComparison();
+    }
+
+    private Task SortByPriceLow() => SortQuotes("price", false);
+    private Task SortByPriceHigh() => SortQuotes("price", true);
+    private Task SortByRating() => SortQuotes("rating", true);
+    private Task SortByExperience() => SortQuotes("experience", true);
+    private Task SortByDate() => SortQuotes("date", false);
+
+    private void ToggleNotes(Guid quoteId)
+    {
+        if (expandedNotes.Contains(quoteId))
+            expandedNotes.Remove(quoteId);
+        else
+            expandedNotes.Add(quoteId);
+    }
+
+    private void AcceptQuote(Guid quoteId)
+    {
+        // TODO: Implement accept quote functionality
+        Navigation.NavigateTo($"/quotes/{quoteId}/accept");
+    }
+
+    private bool IsLowestPrice(QuoteComparisonDto quote)
+    {
+        return comparison != null && quote.TotalCost == comparison.LowestPrice;
+    }
+
+    private string GetInitials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return parts.Length > 0 ? parts[0][0].ToString().ToUpper() : "?";
+    }
+
+    private string FormatBudget(decimal? min, decimal? max)
+    {
+        if (min.HasValue && max.HasValue)
+            return $"${min.Value:N0} - ${max.Value:N0}";
+        if (max.HasValue)
+            return $"Up to ${max.Value:N0}";
+        if (min.HasValue)
+            return $"From ${min.Value:N0}";
+        return "Not specified";
+    }
+
+    private string GetPriceRatingBadgeClass(string rating) => rating switch
+    {
+        "Budget" => "bg-success",
+        "Below Market" => "bg-success-subtle text-success",
+        "At Market" => "bg-primary-subtle text-primary",
+        "Above Market" => "bg-warning-subtle text-warning",
+        "Premium" => "bg-danger-subtle text-danger",
+        _ => "bg-secondary"
+    };
+
+    private string GetPriceBarClass(QuoteComparisonDto quote)
+    {
+        if (IsLowestPrice(quote))
+            return "bg-success";
+
+        return quote.PriceRating switch
+        {
+            "Budget" or "Below Market" => "bg-success",
+            "At Market" => "bg-primary",
+            "Above Market" => "bg-warning",
+            "Premium" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private double GetPricePercentage(QuoteComparisonDto quote)
+    {
+        if (comparison == null || comparison.HighestPrice == comparison.LowestPrice)
+            return 50;
+
+        var range = comparison.HighestPrice - comparison.LowestPrice;
+        var position = quote.TotalCost - comparison.LowestPrice;
+        return (double)(position / range) * 100;
+    }
+}

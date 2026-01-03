@@ -1,0 +1,45 @@
+@namespace Quote.Mobile.Components.Shared
+
+<div class="skeleton @Class" style="@GetStyle()"></div>
+
+<style>
+    .skeleton {
+        background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+        border-radius: 8px;
+    }
+
+    .skeleton.circle {
+        border-radius: 50%;
+    }
+
+    .skeleton.rounded {
+        border-radius: 16px;
+    }
+
+    .skeleton.pill {
+        border-radius: 20px;
+    }
+
+    @@keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string Width { get; set; } = "100%";
+
+    [Parameter]
+    public string Height { get; set; } = "20px";
+
+    [Parameter]
+    public string Class { get; set; } = "";
+
+    private string GetStyle()
+    {
+        return $"width: {Width}; height: {Height};";
+    }
+}

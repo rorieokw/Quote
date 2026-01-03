@@ -1,0 +1,210 @@
+@page "/tradie/team"
+@using Quote.Shared.DTOs
+@inject HttpClient Http
+@inject AuthStateService AuthState
+
+
+<PageTitle>Team Management - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Team Management</h1>
+            <p class="text-muted mb-0">Manage your apprentices, employees, and subcontractors</p>
+        </div>
+        <button class="btn btn-primary" @onclick="() => showAddModal = true">
+            <i class="bi bi-plus-lg me-1"></i>Add Team Member
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+        </div>
+    }
+    else if (!teamMembers.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-people fs-1 text-muted"></i>
+            <h5 class="mt-3">No team members yet</h5>
+            <p class="text-muted">Add apprentices, employees, or subcontractors to your team.</p>
+            <button class="btn btn-primary" @onclick="() => showAddModal = true">
+                <i class="bi bi-plus-lg me-1"></i>Add First Member
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var member in teamMembers)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                                    <span class="text-white fw-bold">@member.FirstName?.Substring(0, 1)@member.LastName?.Substring(0, 1)</span>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0">@member.FirstName @member.LastName</h6>
+                                    <span class="badge @GetRoleBadgeClass(member.Role)">@member.Role</span>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <small class="text-muted"><i class="bi bi-envelope me-1"></i>@member.Email</small>
+                            </div>
+                            @if (!string.IsNullOrEmpty(member.Phone))
+                            {
+                                <div class="mb-2">
+                                    <small class="text-muted"><i class="bi bi-phone me-1"></i>@member.Phone</small>
+                                </div>
+                            }
+                            @if (member.HourlyRate.HasValue)
+                            {
+                                <div class="mb-2">
+                                    <small class="text-muted"><i class="bi bi-cash me-1"></i>$@member.HourlyRate.Value.ToString("N0")/hr</small>
+                                </div>
+                            }
+                        </div>
+                        <div class="card-footer bg-white border-top-0">
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-outline-primary btn-sm flex-grow-1">
+                                    <i class="bi bi-calendar me-1"></i>Schedule
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Add Team Member Modal -->
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Team Member</h5>
+                    <button type="button" class="btn-close" @onclick="() => showAddModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">First Name *</label>
+                        <input type="text" class="form-control" @bind="newMember.FirstName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Last Name *</label>
+                        <input type="text" class="form-control" @bind="newMember.LastName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email *</label>
+                        <input type="email" class="form-control" @bind="newMember.Email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" @bind="newMember.Phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role *</label>
+                        <select class="form-select" @bind="newMember.Role">
+                            <option value="Apprentice">Apprentice</option>
+                            <option value="Tradesperson">Tradesperson</option>
+                            <option value="Subcontractor">Subcontractor</option>
+                            <option value="Labourer">Labourer</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Hourly Rate</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" @bind="newMember.HourlyRate">
+                            <span class="input-group-text">/hr</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showAddModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="AddMember">
+                        <i class="bi bi-plus-lg me-1"></i>Add Member
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool showAddModal = false;
+    private List<TeamMemberDto> teamMembers = new();
+    private NewTeamMember newMember = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadTeam();
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadTeam()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<TeamListResponse>("api/team");
+            teamMembers = response?.Members ?? new();
+        }
+        catch { }
+    }
+
+    private async Task AddMember()
+    {
+        try
+        {
+            var request = new CreateTeamMemberRequest(
+                newMember.FirstName ?? "",
+                newMember.LastName ?? "",
+                newMember.Email ?? "",
+                newMember.Phone,
+                newMember.Role ?? "Labourer",
+                newMember.HourlyRate
+            );
+            var response = await Http.PostAsJsonAsync("api/team", request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadTeam();
+                showAddModal = false;
+                newMember = new();
+            }
+        }
+        catch { }
+    }
+
+    private string GetRoleBadgeClass(string? role) => role switch
+    {
+        "Apprentice" => "bg-info",
+        "Tradesperson" => "bg-success",
+        "Subcontractor" => "bg-warning text-dark",
+        "Labourer" => "bg-secondary",
+        _ => "bg-secondary"
+    };
+
+    private class NewTeamMember
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? Role { get; set; } = "Labourer";
+        public decimal? HourlyRate { get; set; }
+    }
+}

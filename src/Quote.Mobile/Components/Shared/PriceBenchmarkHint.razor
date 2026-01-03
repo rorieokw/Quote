@@ -1,0 +1,296 @@
+@using Quote.Shared.DTOs
+
+@if (IsLoading)
+{
+    <div class="benchmark-hint loading">
+        <div class="benchmark-loader"></div>
+        <span>Loading market data...</span>
+    </div>
+}
+else if (Benchmark != null)
+{
+    <div class="benchmark-hint">
+        <div class="benchmark-header">
+            <span class="benchmark-icon">💰</span>
+            <span class="benchmark-title">Market Pricing</span>
+        </div>
+
+        <div class="benchmark-range">
+            <span class="range-label">@Benchmark.TradeCategoryName@(string.IsNullOrEmpty(Benchmark.Location) ? "" : $" in {Benchmark.Location}"):</span>
+            <span class="range-values">$@Benchmark.MinPrice.ToString("N0") - $@Benchmark.MaxPrice.ToString("N0")</span>
+        </div>
+
+        <div class="benchmark-average">
+            <span>Average: <strong>$@Benchmark.AveragePrice.ToString("N0")</strong></span>
+            <span class="sample-size">(@Benchmark.SampleSize quotes)</span>
+        </div>
+
+        @if (YourPrice > 0)
+        {
+            var percentDiff = CalculatePercentageDifference();
+            var rating = GetRating(percentDiff);
+            var ratingClass = GetRatingClass(rating);
+
+            <div class="your-price-section">
+                <div class="your-price-label">Your price: <strong>$@YourPrice.ToString("N0")</strong></div>
+
+                <div class="price-bar-container">
+                    <div class="price-bar">
+                        <div class="price-marker" style="left: @GetMarkerPosition()%"></div>
+                    </div>
+                    <div class="bar-labels">
+                        <span>$@Benchmark.MinPrice.ToString("N0")</span>
+                        <span>$@Benchmark.MaxPrice.ToString("N0")</span>
+                    </div>
+                </div>
+
+                <div class="rating-badge @ratingClass">
+                    <span class="rating-text">@rating</span>
+                    <span class="rating-diff">@(percentDiff >= 0 ? "+" : "")@percentDiff.ToString("N0")%</span>
+                </div>
+            </div>
+        }
+    </div>
+}
+else if (NoDataAvailable)
+{
+    <div class="benchmark-hint no-data">
+        <span class="benchmark-icon">📊</span>
+        <span>Not enough market data for this area yet</span>
+    </div>
+}
+
+<style>
+    .benchmark-hint {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border: 1px solid #bae6fd;
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+
+    .benchmark-hint.loading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+
+    .benchmark-hint.no-data {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #6b7280;
+        font-size: 0.875rem;
+        background: #f9fafb;
+        border-color: #e5e7eb;
+    }
+
+    .benchmark-loader {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #e5e7eb;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .benchmark-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .benchmark-icon {
+        font-size: 1.125rem;
+    }
+
+    .benchmark-title {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: #0369a1;
+    }
+
+    .benchmark-range {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    .range-label {
+        font-size: 0.8125rem;
+        color: #374151;
+    }
+
+    .range-values {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #0369a1;
+    }
+
+    .benchmark-average {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.8125rem;
+        color: #374151;
+        margin-bottom: 12px;
+    }
+
+    .benchmark-average strong {
+        color: #0369a1;
+    }
+
+    .sample-size {
+        color: #9ca3af;
+        font-size: 0.75rem;
+    }
+
+    .your-price-section {
+        border-top: 1px solid #bae6fd;
+        padding-top: 12px;
+    }
+
+    .your-price-label {
+        font-size: 0.875rem;
+        color: #374151;
+        margin-bottom: 10px;
+    }
+
+    .your-price-label strong {
+        color: #1f2937;
+    }
+
+    .price-bar-container {
+        margin-bottom: 10px;
+    }
+
+    .price-bar {
+        height: 8px;
+        background: linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%);
+        border-radius: 4px;
+        position: relative;
+    }
+
+    .price-marker {
+        position: absolute;
+        top: -4px;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border: 3px solid #1f2937;
+        border-radius: 50%;
+        transform: translateX(-50%);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .bar-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.6875rem;
+        color: #9ca3af;
+        margin-top: 4px;
+    }
+
+    .rating-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+    }
+
+    .rating-badge.budget {
+        background: #fef9c3;
+        color: #a16207;
+    }
+
+    .rating-badge.below-market {
+        background: #fed7aa;
+        color: #c2410c;
+    }
+
+    .rating-badge.at-market {
+        background: #dcfce7;
+        color: #15803d;
+    }
+
+    .rating-badge.above-market {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .rating-badge.premium {
+        background: #f3e8ff;
+        color: #7c3aed;
+    }
+
+    .rating-diff {
+        opacity: 0.8;
+        font-weight: 500;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public PriceBenchmarkDto? Benchmark { get; set; }
+
+    [Parameter]
+    public decimal YourPrice { get; set; }
+
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    [Parameter]
+    public bool NoDataAvailable { get; set; }
+
+    private decimal CalculatePercentageDifference()
+    {
+        if (Benchmark == null || Benchmark.AveragePrice == 0) return 0;
+        return Math.Round(((YourPrice - Benchmark.AveragePrice) / Benchmark.AveragePrice) * 100, 1);
+    }
+
+    private string GetRating(decimal percentDiff)
+    {
+        return percentDiff switch
+        {
+            > 20 => "Premium",
+            > 5 => "Above Market",
+            >= -5 => "At Market",
+            >= -20 => "Below Market",
+            _ => "Budget"
+        };
+    }
+
+    private string GetRatingClass(string rating)
+    {
+        return rating switch
+        {
+            "Premium" => "premium",
+            "Above Market" => "above-market",
+            "At Market" => "at-market",
+            "Below Market" => "below-market",
+            _ => "budget"
+        };
+    }
+
+    private double GetMarkerPosition()
+    {
+        if (Benchmark == null) return 50;
+
+        var range = Benchmark.MaxPrice - Benchmark.MinPrice;
+        if (range == 0) return 50;
+
+        var position = (double)((YourPrice - Benchmark.MinPrice) / range) * 100;
+
+        // Clamp to 0-100
+        return Math.Max(0, Math.Min(100, position));
+    }
+}

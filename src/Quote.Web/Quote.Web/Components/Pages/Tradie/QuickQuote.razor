@@ -1,0 +1,268 @@
+@page "/tradie/quote/{JobId:guid}"
+@using Quote.Shared.DTOs
+@using Quote.Web.Client.Services
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject TradieService TradieService
+
+<PageTitle>Quick Quote - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="d-flex align-items-center mb-4">
+                <a href="/jobs" class="btn btn-link text-decoration-none p-0 me-3">
+                    <i class="bi bi-arrow-left fs-4"></i>
+                </a>
+                <div>
+                    <h1 class="h3 mb-0">Quick Quote</h1>
+                    <p class="text-muted mb-0">Submit your quote in under 2 minutes</p>
+                </div>
+            </div>
+
+            @if (isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (job == null)
+            {
+                <div class="alert alert-warning">Job not found.</div>
+            }
+            else
+            {
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">@job.Title</h5>
+                        <p class="text-muted mb-2">
+                            <i class="bi bi-geo-alt me-1"></i>@job.SuburbName, @job.State
+                        </p>
+                        @if (job.BudgetMax.HasValue)
+                        {
+                            <p class="mb-0">
+                                <strong>Budget:</strong> Up to $@job.BudgetMax.Value.ToString("N0")
+                            </p>
+                        }
+                    </div>
+                </div>
+
+                <EditForm Model="quoteModel" OnValidSubmit="SubmitQuote" FormName="quickQuote">
+                    <DataAnnotationsValidator />
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+
+                    @if (templates.Any())
+                    {
+                        <div class="card mb-4 border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-lightning-charge me-2 text-warning"></i>Use a Template
+                                </h6>
+                                <div class="row g-2">
+                                    @foreach (var template in templates.Take(4))
+                                    {
+                                        <div class="col-6">
+                                            <button type="button"
+                                                    class="btn w-100 py-3 @(selectedTemplateId == template.Id ? "btn-primary" : "btn-outline-primary")"
+                                                    @onclick="() => SelectTemplate(template)">
+                                                <strong>@template.Name</strong><br />
+                                                <small>$@template.DefaultLabourCost.ToString("N0")</small>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="card mb-4 border-0 shadow-sm">
+                        <div class="card-body">
+                            <label class="form-label fw-bold">Labour Cost *</label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text">$</span>
+                                <InputNumber @bind-Value="quoteModel.LabourCost" class="form-control form-control-lg text-center fs-3" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 border-0 shadow-sm">
+                        <div class="card-body">
+                            <label class="form-label fw-bold">Materials Cost (optional)</label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text">$</span>
+                                <InputNumber @bind-Value="quoteModel.MaterialsCost" class="form-control form-control-lg text-center" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 border-0 shadow-sm">
+                        <div class="card-body">
+                            <label class="form-label fw-bold">Estimated Hours *</label>
+                            <div class="d-flex justify-content-center gap-2">
+                                @foreach (var hours in new[] { 1, 2, 4, 8, 16 })
+                                {
+                                    <button type="button"
+                                            class="btn btn-lg @(quoteModel.EstimatedDurationHours == hours ? "btn-primary" : "btn-outline-secondary")"
+                                            style="min-width: 60px;"
+                                            @onclick="() => quoteModel.EstimatedDurationHours = hours">
+                                        @hours
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 border-0 shadow-sm">
+                        <div class="card-body">
+                            <label class="form-label fw-bold">Notes</label>
+                            <InputTextArea @bind-Value="quoteModel.Notes" class="form-control" rows="3" placeholder="Any additional notes..." />
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm bg-primary text-white">
+                        <div class="card-body text-center py-4">
+                            <h4 class="mb-1">Total Quote</h4>
+                            <h2 class="display-4 fw-bold mb-3">$@TotalPrice.ToString("N0")</h2>
+                            <button type="submit" class="btn btn-light btn-lg px-5" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Submit Quote
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Price Benchmark -->
+                    <Quote.Web.Components.Shared.PriceBenchmarkHint
+                        Benchmark="@benchmark"
+                        YourPrice="@TotalPrice"
+                        IsLoading="@isLoadingBenchmark"
+                        NoDataAvailable="@noBenchmarkData" />
+                </EditForm>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Guid JobId { get; set; }
+
+    private JobDto? job;
+    private List<QuoteTemplateDto> templates = new();
+    private QuoteFormModel quoteModel = new();
+    private Guid? selectedTemplateId;
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private string? errorMessage;
+
+    // Price benchmarking
+    private PriceBenchmarkDto? benchmark;
+    private bool isLoadingBenchmark = false;
+    private bool noBenchmarkData = false;
+
+    private decimal TotalPrice => quoteModel.LabourCost + (quoteModel.MaterialsCost ?? 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            job = await Http.GetFromJsonAsync<JobDto>($"api/jobs/{JobId}");
+            var templatesResponse = await Http.GetFromJsonAsync<TemplateListResponse>("api/templates");
+            templates = templatesResponse?.Templates ?? new();
+
+            // Load price benchmark if job has trade category
+            if (job?.TradeCategoryId != null)
+            {
+                await LoadBenchmark();
+            }
+        }
+        catch
+        {
+            errorMessage = "Failed to load job details";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadBenchmark()
+    {
+        if (job?.TradeCategoryId == null) return;
+
+        isLoadingBenchmark = true;
+        noBenchmarkData = false;
+
+        try
+        {
+            benchmark = await TradieService.GetPriceBenchmarkAsync(job.TradeCategoryId.Value, job.Postcode);
+            noBenchmarkData = benchmark == null || benchmark.SampleSize < 3;
+        }
+        catch
+        {
+            noBenchmarkData = true;
+        }
+        finally
+        {
+            isLoadingBenchmark = false;
+        }
+    }
+
+    private void SelectTemplate(QuoteTemplateDto template)
+    {
+        selectedTemplateId = template.Id;
+        quoteModel.LabourCost = template.DefaultLabourCost;
+        quoteModel.MaterialsCost = template.DefaultMaterialsCost;
+        quoteModel.EstimatedDurationHours = template.DefaultDurationHours;
+        quoteModel.Notes = template.DefaultNotes;
+        quoteModel.TemplateId = template.Id;
+    }
+
+    private async Task SubmitQuote()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+        try
+        {
+            var request = new QuickQuoteRequest(
+                JobId, quoteModel.LabourCost, quoteModel.MaterialsCost,
+                quoteModel.EstimatedDurationHours, quoteModel.Notes,
+                quoteModel.TemplateId, null, false, null
+            );
+            var response = await Http.PostAsJsonAsync("api/quotes/quick", request);
+            if (response.IsSuccessStatusCode)
+            {
+                Navigation.NavigateTo("/tradie/quotes?success=true");
+            }
+            else
+            {
+                errorMessage = "Failed to submit quote.";
+            }
+        }
+        catch
+        {
+            errorMessage = "An error occurred.";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private class QuoteFormModel
+    {
+        public decimal LabourCost { get; set; } = 250;
+        public decimal? MaterialsCost { get; set; }
+        public int EstimatedDurationHours { get; set; } = 2;
+        public string? Notes { get; set; }
+        public Guid? TemplateId { get; set; }
+    }
+}

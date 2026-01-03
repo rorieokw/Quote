@@ -1,0 +1,517 @@
+@page "/profile"
+@using Quote.Mobile.Components.Shared
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<Toast @ref="toast" />
+
+<!-- Logout Confirmation Dialog -->
+@if (showLogoutConfirm)
+{
+    <div class="dialog-overlay" @onclick="CancelLogout">
+        <div class="dialog-content" @onclick:stopPropagation="true">
+            <div class="dialog-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+            </div>
+            <h3>Sign Out?</h3>
+            <p>Are you sure you want to sign out of your account?</p>
+            <div class="dialog-actions">
+                <button class="btn-dialog-cancel" @onclick="CancelLogout">Cancel</button>
+                <button class="btn-dialog-confirm" @onclick="ConfirmLogout">Sign Out</button>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="profile-page">
+    @if (!isInitialized)
+    {
+        <div class="loading-center">
+            <div class="loader"></div>
+        </div>
+    }
+    else if (!Auth.IsAuthenticated)
+    {
+        <div class="not-auth">
+            <div class="not-auth-icon">🔒</div>
+            <h2>Sign in required</h2>
+            <p>Please sign in to view your profile</p>
+            <button class="btn-primary" @onclick="GoToLogin">Sign In</button>
+        </div>
+    }
+    else
+    {
+        <!-- Header -->
+        <div class="profile-header">
+            <div class="header-bg"></div>
+            <div class="header-content">
+                <div class="avatar-large">
+                    @(Auth.FirstName?.Substring(0, 1).ToUpper() ?? "U")
+                </div>
+                <h1>@Auth.FirstName @Auth.LastName</h1>
+                <div class="user-badge">@Auth.UserType</div>
+            </div>
+        </div>
+
+        <!-- Profile Content -->
+        <div class="profile-content">
+            <!-- Account Card -->
+            <div class="profile-card">
+                <div class="card-title">
+                    <span class="card-icon">👤</span>
+                    Account Details
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Email</span>
+                    <span class="info-value">@Auth.Email</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Name</span>
+                    <span class="info-value">@Auth.FirstName @Auth.LastName</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Account Type</span>
+                    <span class="info-badge">@Auth.UserType</span>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            @if (Auth.IsTradie)
+            {
+                <div class="profile-card">
+                    <div class="card-title">
+                        <span class="card-icon">🔧</span>
+                        Tradie Tools
+                    </div>
+                    <div class="link-grid">
+                        <button class="link-tile" @onclick='() => Navigate("/my-quotes")'>
+                            <div class="link-icon purple">📄</div>
+                            <span>My Quotes</span>
+                        </button>
+                        <button class="link-tile" @onclick='() => Navigate("/templates")'>
+                            <div class="link-icon orange">⚡</div>
+                            <span>Templates</span>
+                        </button>
+                        <button class="link-tile" @onclick='() => Navigate("/material-bundles")'>
+                            <div class="link-icon teal">📦</div>
+                            <span>Materials</span>
+                        </button>
+                        <button class="link-tile" @onclick='() => Navigate("/jobs")'>
+                            <div class="link-icon blue">🔍</div>
+                            <span>Browse Jobs</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            @if (Auth.IsCustomer)
+            {
+                <div class="profile-card">
+                    <div class="card-title">
+                        <span class="card-icon">📋</span>
+                        Customer Tools
+                    </div>
+                    <div class="link-grid">
+                        <button class="link-tile" @onclick='() => Navigate("/jobs/create")'>
+                            <div class="link-icon blue">➕</div>
+                            <span>Post Job</span>
+                        </button>
+                        <button class="link-tile" @onclick='() => Navigate("/my-jobs")'>
+                            <div class="link-icon green">📋</div>
+                            <span>My Jobs</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Sign Out -->
+            <button class="btn-signout" @onclick="Logout">
+                <span>🚪</span>
+                Sign Out
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .profile-page {
+        min-height: 100vh;
+        background: #f8f9fc;
+    }
+
+    .loading-center {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .loader {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e8eaed;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .not-auth {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+    }
+
+    .not-auth-icon {
+        font-size: 4rem;
+        margin-bottom: 16px;
+    }
+
+    .not-auth h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .not-auth p {
+        color: #6b7280;
+        margin: 0 0 24px;
+    }
+
+    .btn-primary {
+        padding: 14px 32px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+    }
+
+    /* Header */
+    .profile-header {
+        position: relative;
+        padding-bottom: 24px;
+    }
+
+    .header-bg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 160px;
+        background: #0d6efd;
+        border-radius: 0 0 32px 32px;
+    }
+
+    .header-content {
+        position: relative;
+        text-align: center;
+        padding-top: 48px;
+    }
+
+    .avatar-large {
+        width: 96px;
+        height: 96px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #0d6efd;
+        margin: 0 auto 16px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        border: 4px solid white;
+    }
+
+    .header-content h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .user-badge {
+        display: inline-block;
+        background: #0d6efd;
+        color: white;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+    }
+
+    /* Content */
+    .profile-content {
+        padding: 0 16px 32px;
+    }
+
+    .profile-card {
+        background: white;
+        border-radius: 20px;
+        padding: 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .card-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .card-icon {
+        font-size: 1.25rem;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid #f9fafb;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .info-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .info-value {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .info-badge {
+        background: #e7f1ff;
+        color: #0d6efd;
+        padding: 4px 12px;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    /* Link Grid */
+    .link-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+
+    .link-tile {
+        background: #f9fafb;
+        border: none;
+        border-radius: 16px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .link-tile:active {
+        transform: scale(0.97);
+        background: #f3f4f6;
+    }
+
+    .link-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+
+    .link-icon.blue { background: #e7f1ff; }
+    .link-icon.green { background: #e7f1ff; }
+    .link-icon.orange { background: #e7f1ff; }
+    .link-icon.purple { background: #e7f1ff; }
+    .link-icon.teal { background: #ccfbf1; }
+
+    .link-tile span:last-child {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #4b5563;
+    }
+
+    /* Sign Out */
+    .btn-signout {
+        width: 100%;
+        padding: 16px;
+        background: white;
+        color: #dc2626;
+        border: 2px solid #fecaca;
+        border-radius: 16px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 8px;
+    }
+
+    .btn-signout:active {
+        background: #fef2f2;
+    }
+
+    /* Dialog Overlay */
+    .dialog-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 24px;
+        animation: fadeIn 0.2s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .dialog-content {
+        background: white;
+        border-radius: 24px;
+        padding: 32px 24px;
+        width: 100%;
+        max-width: 320px;
+        text-align: center;
+        animation: slideUp 0.3s ease-out;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    }
+
+    @@keyframes slideUp {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .dialog-icon {
+        margin-bottom: 16px;
+    }
+
+    .dialog-content h3 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .dialog-content p {
+        font-size: 0.9375rem;
+        color: #6b7280;
+        margin: 0 0 24px;
+        line-height: 1.5;
+    }
+
+    .dialog-actions {
+        display: flex;
+        gap: 12px;
+    }
+
+    .btn-dialog-cancel {
+        flex: 1;
+        padding: 14px;
+        background: #f3f4f6;
+        color: #6b7280;
+        border: none;
+        border-radius: 14px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-dialog-confirm {
+        flex: 1;
+        padding: 14px;
+        background: #ef4444;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-dialog-cancel:active,
+    .btn-dialog-confirm:active {
+        transform: scale(0.97);
+    }
+</style>
+
+@code {
+    private Toast? toast;
+    private bool isInitialized = false;
+    private bool showLogoutConfirm = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        isInitialized = true;
+    }
+
+    private void GoToLogin() => Navigation.NavigateTo("/login");
+    private void Navigate(string path) => Navigation.NavigateTo(path);
+
+    private void Logout()
+    {
+        showLogoutConfirm = true;
+    }
+
+    private void CancelLogout()
+    {
+        showLogoutConfirm = false;
+    }
+
+    private async Task ConfirmLogout()
+    {
+        showLogoutConfirm = false;
+        toast?.ShowInfo("Signing out...");
+        await Task.Delay(500); // Brief delay for UX
+        await Auth.LogoutAsync();
+        Navigation.NavigateTo("/login", true);
+    }
+}

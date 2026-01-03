@@ -1,0 +1,270 @@
+@page "/tradie/quotes"
+@using Quote.Shared.DTOs
+@using Quote.Web.Client.Services
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject TradieService TradieService
+
+<PageTitle>My Quotes - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">My Quotes</h1>
+            <p class="text-muted mb-0">Track your submitted quotes</p>
+        </div>
+    </div>
+
+    @if (showSuccess)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle me-2"></i>Quote submitted successfully!
+            <button type="button" class="btn-close" @onclick="() => showSuccess = false"></button>
+        </div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="text-primary mb-0">@quotes.Count</h3>
+                    <small class="text-muted">Total</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="text-warning mb-0">@quotes.Count(q => q.Status == "Pending")</h3>
+                    <small class="text-muted">Pending</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="text-success mb-0">@quotes.Count(q => q.IsWinningQuote)</h3>
+                    <small class="text-muted">Won</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="text-info mb-0">@quotes.Sum(q => q.ViewCount)</h3>
+                    <small class="text-muted">Views</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-4">
+            <div class="card border-0 shadow-sm h-100 @GetMarketPositionCardClass()">
+                <div class="card-body text-center py-3">
+                    @if (isLoadingComparison)
+                    {
+                        <div class="spinner-border spinner-border-sm text-info"></div>
+                        <small class="text-muted d-block">Loading...</small>
+                    }
+                    else if (quotesComparison != null)
+                    {
+                        <h3 class="mb-0">@(quotesComparison.AveragePosition >= 0 ? "+" : "")@quotesComparison.AveragePosition.ToString("N0")%</h3>
+                        <small class="text-muted">
+                            <i class="bi bi-graph-up me-1"></i>Market Position
+                        </small>
+                        <div class="mt-1">
+                            <span class="badge bg-success-subtle text-success me-1" title="Below Market">@quotesComparison.BelowMarketCount</span>
+                            <span class="badge bg-primary-subtle text-primary me-1" title="At Market">@quotesComparison.AtMarketCount</span>
+                            <span class="badge bg-warning-subtle text-warning" title="Above Market">@quotesComparison.AboveMarketCount</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <h3 class="text-muted mb-0">--</h3>
+                        <small class="text-muted">No benchmark data</small>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-pills mb-4">
+        <li class="nav-item">
+            <button class="nav-link @(statusFilter == null ? "active" : "")" @onclick="() => FilterByStatus(null)">All</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(statusFilter == "Pending" ? "active" : "")" @onclick='() => FilterByStatus("Pending")'>Pending</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(statusFilter == "Accepted" ? "active" : "")" @onclick='() => FilterByStatus("Accepted")'>Accepted</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(statusFilter == "Rejected" ? "active" : "")" @onclick='() => FilterByStatus("Rejected")'>Rejected</button>
+        </li>
+    </ul>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+        </div>
+    }
+    else if (!quotes.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <h5 class="mt-3">No quotes yet</h5>
+            <p class="text-muted">Browse jobs and submit your first quote!</p>
+            <a href="/jobs" class="btn btn-primary">Browse Jobs</a>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var quote in filteredQuotes)
+            {
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <h5 class="mb-1">@quote.JobTitle</h5>
+                                    <p class="text-muted mb-2">
+                                        <i class="bi bi-geo-alt me-1"></i>@quote.JobSuburb |
+                                        <i class="bi bi-person me-1"></i>@quote.CustomerName
+                                    </p>
+                                    <span class="badge @GetStatusBadgeClass(quote.Status)">@quote.Status</span>
+                                    @if (quote.IsWinningQuote)
+                                    {
+                                        <span class="badge bg-success ms-1"><i class="bi bi-trophy me-1"></i>Won</span>
+                                    }
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    <h4 class="text-primary mb-0">$@quote.TotalCost.ToString("N0")</h4>
+                                    <small class="text-muted">Amount</small>
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    @{
+                                        var comparison = GetQuoteComparison(quote.QuoteId);
+                                    }
+                                    @if (comparison != null)
+                                    {
+                                        <span class="badge @GetRatingBadgeClass(comparison.Rating) px-2 py-1">
+                                            <i class="bi @GetRatingIcon(comparison.Rating) me-1"></i>
+                                            @comparison.Rating
+                                            <small class="ms-1">@(comparison.PercentageDifference >= 0 ? "+" : "")@comparison.PercentageDifference.ToString("N0")%</small>
+                                        </span>
+                                    }
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    @if (quote.ViewCount > 0)
+                                    {
+                                        <span class="text-success"><i class="bi bi-eye me-1"></i>@quote.ViewCount views</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted"><i class="bi bi-eye-slash me-1"></i>Not viewed</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<QuoteStatusDto> quotes = new();
+    private string? statusFilter;
+    private bool isLoading = true;
+    private bool showSuccess = false;
+
+    // Benchmark comparison
+    private TradieQuotesComparisonResponse? quotesComparison;
+    private bool isLoadingComparison = false;
+    private Dictionary<Guid, QuotePriceComparisonDto> quoteComparisonLookup = new();
+
+    private IEnumerable<QuoteStatusDto> filteredQuotes =>
+        statusFilter == null ? quotes : quotes.Where(q => q.Status == statusFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("success", out var success))
+        {
+            showSuccess = success == "true";
+        }
+        await LoadQuotes();
+        await LoadComparison();
+    }
+
+    private async Task LoadQuotes()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<QuoteListResponse>("api/quotes/my-quotes?pageSize=50");
+            quotes = response?.Quotes ?? new();
+        }
+        catch { quotes = new(); }
+        finally { isLoading = false; }
+    }
+
+    private async Task LoadComparison()
+    {
+        isLoadingComparison = true;
+        try
+        {
+            quotesComparison = await TradieService.GetMyQuotesComparisonAsync();
+            if (quotesComparison?.Quotes != null)
+            {
+                quoteComparisonLookup = quotesComparison.Quotes
+                    .ToDictionary(q => q.QuoteId, q => q);
+            }
+        }
+        catch { /* Benchmark data not available */ }
+        finally { isLoadingComparison = false; }
+    }
+
+    private QuotePriceComparisonDto? GetQuoteComparison(Guid quoteId)
+    {
+        return quoteComparisonLookup.TryGetValue(quoteId, out var comparison) ? comparison : null;
+    }
+
+    private void FilterByStatus(string? status) => statusFilter = status;
+
+    private string GetStatusBadgeClass(string status) => status switch
+    {
+        "Pending" => "bg-warning text-dark",
+        "Accepted" => "bg-success",
+        "Rejected" => "bg-danger",
+        _ => "bg-secondary"
+    };
+
+    private string GetMarketPositionCardClass()
+    {
+        if (quotesComparison == null) return "";
+        if (quotesComparison.AveragePosition < -5) return "border-success";
+        if (quotesComparison.AveragePosition > 5) return "border-warning";
+        return "border-primary";
+    }
+
+    private string GetRatingBadgeClass(string rating) => rating switch
+    {
+        "Premium" => "bg-purple text-white",
+        "Above Market" => "bg-primary text-white",
+        "At Market" => "bg-success text-white",
+        "Below Market" => "bg-warning text-dark",
+        "Budget" => "bg-secondary text-white",
+        _ => "bg-light text-dark"
+    };
+
+    private string GetRatingIcon(string rating) => rating switch
+    {
+        "Premium" => "bi-gem",
+        "Above Market" => "bi-arrow-up-circle",
+        "At Market" => "bi-check-circle",
+        "Below Market" => "bi-arrow-down-circle",
+        "Budget" => "bi-tag",
+        _ => "bi-dash"
+    };
+}

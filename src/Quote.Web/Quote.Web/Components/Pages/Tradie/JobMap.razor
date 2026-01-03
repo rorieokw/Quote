@@ -1,0 +1,531 @@
+@page "/tradie/map"
+@using Quote.Shared.DTOs
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+
+<PageTitle>Job Map - Quote</PageTitle>
+
+<div class="job-map-page">
+    <!-- Header -->
+    <div class="map-header">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center py-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="header-icon">
+                        <i class="bi bi-map"></i>
+                    </div>
+                    <div>
+                        <h1 class="h4 mb-0 fw-bold">Job Map</h1>
+                        <p class="text-muted mb-0 small">Find jobs near your location</p>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-light" @onclick="RefreshJobs" disabled="@isLoading">
+                        <i class="bi bi-arrow-clockwise @(isLoading ? "spin" : "")"></i>
+                    </button>
+                    <button class="btn btn-primary" @onclick="CenterOnMe">
+                        <i class="bi bi-crosshairs me-2"></i>My Location
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="container-fluid">
+            <div class="d-flex gap-4 py-2">
+                <div class="stat-item">
+                    <i class="bi bi-briefcase text-primary"></i>
+                    <span><strong>@markers.Count</strong> jobs</span>
+                </div>
+                <div class="stat-item">
+                    <i class="bi bi-lightning-fill text-danger"></i>
+                    <span><strong>@markers.Count(m => m.IsUrgent)</strong> urgent</span>
+                </div>
+                <div class="stat-item">
+                    <i class="bi bi-geo-alt text-success"></i>
+                    <span><strong>@clusters.Count</strong> suburbs</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="map-content">
+        <div class="row g-0 h-100">
+            <!-- Map -->
+            <div class="col-lg-8 col-xl-9 h-100">
+                <div class="map-container">
+                    @if (isLoading && !mapInitialized)
+                    {
+                        <div class="map-loading">
+                            <div class="spinner-border text-primary mb-3"></div>
+                            <p class="mb-0">Loading map...</p>
+                        </div>
+                    }
+                    <div id="jobMap" class="map-element"></div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="col-lg-4 col-xl-3 h-100">
+                <div class="sidebar">
+                    <!-- Search -->
+                    <div class="sidebar-search">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="bi bi-search text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0" placeholder="Search suburbs..." @bind="searchQuery" @bind:event="oninput">
+                        </div>
+                    </div>
+
+                    <!-- Clusters List -->
+                    <div class="clusters-section">
+                        <h6 class="section-title">
+                            <i class="bi bi-pin-map me-2"></i>Jobs by Suburb
+                        </h6>
+
+                        @if (isLoading)
+                        {
+                            <div class="text-center py-4">
+                                <div class="spinner-border spinner-border-sm text-primary"></div>
+                            </div>
+                        }
+                        else if (FilteredClusters.Any())
+                        {
+                            <div class="cluster-list">
+                                @foreach (var cluster in FilteredClusters.Take(15))
+                                {
+                                    <button class="cluster-item @(selectedCluster?.Postcode == cluster.Postcode ? "active" : "")"
+                                            @onclick="() => SelectCluster(cluster)">
+                                        <div class="cluster-info">
+                                            <div class="cluster-name">@cluster.SuburbName</div>
+                                            <div class="cluster-postcode">@cluster.Postcode</div>
+                                        </div>
+                                        <div class="cluster-badges">
+                                            <span class="badge bg-primary">@cluster.JobCount</span>
+                                            @if (cluster.UrgentCount > 0)
+                                            {
+                                                <span class="badge bg-danger">
+                                                    <i class="bi bi-lightning-fill"></i> @cluster.UrgentCount
+                                                </span>
+                                            }
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="empty-state">
+                                <i class="bi bi-inbox"></i>
+                                <p>No jobs found</p>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Selected Job Card -->
+                    @if (selectedMarker != null)
+                    {
+                        <div class="selected-job">
+                            <div class="selected-job-header">
+                                <h6>@selectedMarker.Title</h6>
+                                <button class="btn-close btn-close-white btn-sm" @onclick="() => selectedMarker = null"></button>
+                            </div>
+                            <div class="selected-job-body">
+                                <div class="job-meta">
+                                    <span><i class="bi bi-geo-alt"></i> @selectedMarker.SuburbName</span>
+                                    <span><i class="bi bi-tools"></i> @selectedMarker.TradeCategoryName</span>
+                                </div>
+                                @if (selectedMarker.BudgetMax.HasValue)
+                                {
+                                    <div class="job-budget">
+                                        $@selectedMarker.BudgetMax.Value.ToString("N0")
+                                    </div>
+                                }
+                                @if (selectedMarker.IsUrgent)
+                                {
+                                    <span class="badge bg-danger mb-3">
+                                        <i class="bi bi-lightning-fill me-1"></i>Urgent Job
+                                    </span>
+                                }
+                                <a href="/tradie/quote/@selectedMarker.JobId" class="btn btn-primary w-100">
+                                    <i class="bi bi-send-fill me-2"></i>Quick Quote
+                                </a>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .job-map-page {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 80px);
+        background: #f1f5f9;
+    }
+
+    .map-header {
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .header-icon {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.25rem;
+    }
+
+    .stats-bar {
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .stat-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.875rem;
+        color: #64748b;
+    }
+
+    .stat-item i {
+        font-size: 1rem;
+    }
+
+    .map-content {
+        flex: 1;
+        overflow: hidden;
+    }
+
+    .map-container {
+        position: relative;
+        height: 100%;
+    }
+
+    .map-element {
+        height: 100%;
+        width: 100%;
+    }
+
+    .map-loading {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .sidebar {
+        height: 100%;
+        background: white;
+        border-left: 1px solid #e2e8f0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .sidebar-search {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .sidebar-search .form-control {
+        font-size: 0.875rem;
+    }
+
+    .sidebar-search .form-control:focus {
+        box-shadow: none;
+        border-color: #3b82f6;
+    }
+
+    .clusters-section {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+    }
+
+    .section-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #94a3b8;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+    }
+
+    .cluster-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .cluster-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+        text-align: left;
+    }
+
+    .cluster-item:hover {
+        background: #f1f5f9;
+        border-color: #3b82f6;
+    }
+
+    .cluster-item.active {
+        background: #eff6ff;
+        border-color: #3b82f6;
+    }
+
+    .cluster-info {
+        min-width: 0;
+    }
+
+    .cluster-name {
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #1e293b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cluster-postcode {
+        font-size: 0.75rem;
+        color: #94a3b8;
+    }
+
+    .cluster-badges {
+        display: flex;
+        gap: 0.375rem;
+        flex-shrink: 0;
+    }
+
+    .cluster-badges .badge {
+        font-size: 0.7rem;
+        padding: 0.35rem 0.5rem;
+        border-radius: 6px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #94a3b8;
+    }
+
+    .empty-state i {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .selected-job {
+        border-top: 1px solid #e2e8f0;
+        margin-top: auto;
+    }
+
+    .selected-job-header {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .selected-job-header h6 {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+        flex: 1;
+        padding-right: 0.5rem;
+    }
+
+    .selected-job-body {
+        padding: 1rem;
+    }
+
+    .job-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.375rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .job-meta span {
+        font-size: 0.8rem;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .job-budget {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #059669;
+        margin-bottom: 0.75rem;
+    }
+
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@media (max-width: 991.98px) {
+        .job-map-page {
+            height: auto;
+        }
+
+        .map-content {
+            flex-direction: column-reverse;
+        }
+
+        .map-container {
+            height: 50vh;
+        }
+
+        .sidebar {
+            border-left: none;
+            border-bottom: 1px solid #e2e8f0;
+            max-height: 40vh;
+        }
+    }
+</style>
+
+@code {
+    private List<JobClusterDto> clusters = new();
+    private List<JobMapMarkerDto> markers = new();
+    private JobMapMarkerDto? selectedMarker;
+    private JobClusterDto? selectedCluster;
+    private bool isLoading = true;
+    private bool mapInitialized = false;
+    private string searchQuery = "";
+
+    private IEnumerable<JobClusterDto> FilteredClusters => string.IsNullOrWhiteSpace(searchQuery)
+        ? clusters
+        : clusters.Where(c =>
+            c.SuburbName.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+            c.Postcode.Contains(searchQuery, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeMap();
+            await LoadJobs();
+        }
+    }
+
+    private async Task InitializeMap()
+    {
+        try
+        {
+            // Default to Sydney
+            await JSRuntime.InvokeVoidAsync("jobMap.initialize", "jobMap", -33.8688, 151.2093, 11);
+            mapInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Map init error: {ex.Message}");
+        }
+    }
+
+    private async Task LoadJobs()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<JobMapResponseDto>("api/jobs/map");
+            if (response != null)
+            {
+                markers = response.Markers;
+                clusters = response.Clusters.OrderByDescending(c => c.JobCount).ToList();
+
+                if (mapInitialized && markers.Any())
+                {
+                    await JSRuntime.InvokeVoidAsync("jobMap.setMarkers", markers);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Load jobs error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshJobs()
+    {
+        await LoadJobs();
+    }
+
+    private async Task CenterOnMe()
+    {
+        try
+        {
+            var position = await JSRuntime.InvokeAsync<GeolocationResult>("geolocation.getCurrentPosition");
+            await JSRuntime.InvokeVoidAsync("jobMap.addUserMarker", position.Latitude, position.Longitude);
+            await JSRuntime.InvokeVoidAsync("jobMap.setCenter", position.Latitude, position.Longitude, 13);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Geolocation error: {ex.Message}");
+        }
+    }
+
+    private async Task SelectCluster(JobClusterDto cluster)
+    {
+        selectedCluster = cluster;
+        await JSRuntime.InvokeVoidAsync("jobMap.setCenter", cluster.Latitude, cluster.Longitude, 14);
+    }
+
+    private class GeolocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+
+    private class JobMapResponseDto
+    {
+        public List<JobMapMarkerDto> Markers { get; set; } = new();
+        public List<JobClusterDto> Clusters { get; set; } = new();
+    }
+}

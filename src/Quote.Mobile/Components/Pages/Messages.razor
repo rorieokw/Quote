@@ -1,0 +1,599 @@
+@page "/messages"
+@using Quote.Mobile.Components.Shared
+@using Quote.Mobile.Services
+@inject ApiService Api
+@inject AuthService Auth
+@inject SignalRService SignalR
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<Toast @ref="toast" />
+
+<div class="messages-page">
+    @if (!isInitialized)
+    {
+        <div class="loading-center">
+            <div class="loader"></div>
+        </div>
+    }
+    else if (!Auth.IsAuthenticated)
+    {
+        <div class="not-auth">
+            <div class="not-auth-icon">🔒</div>
+            <h2>Sign in required</h2>
+            <p>Please sign in to view your messages</p>
+            <button class="btn-primary" @onclick="GoToLogin">Sign In</button>
+        </div>
+    }
+    else
+    {
+        <!-- Header -->
+        <div class="page-header">
+            <button class="back-btn" @onclick="GoBack">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <div class="header-text">
+                <h1>Messages</h1>
+                <p>Your conversations</p>
+            </div>
+            @if (isConnected)
+            {
+                <div class="live-badge">Live</div>
+            }
+        </div>
+
+        <!-- Content -->
+        <PullToRefresh OnRefresh="RefreshConversations">
+            <div class="page-content">
+                @if (isLoading && !conversations.Any())
+                {
+                    <!-- Skeleton Loading -->
+                    <div class="conversations-list">
+                        <SkeletonCard Type="conversation" />
+                        <SkeletonCard Type="conversation" />
+                        <SkeletonCard Type="conversation" />
+                    </div>
+                }
+                else if (hasError)
+                {
+                    <div class="error-state">
+                        <div class="error-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="8" x2="12" y2="12"/>
+                                <line x1="12" y1="16" x2="12.01" y2="16"/>
+                            </svg>
+                        </div>
+                        <h3>Unable to load messages</h3>
+                        <p>Please check your connection and try again</p>
+                        <button class="btn-retry" @onclick="LoadConversations">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 4v6h-6M1 20v-6h6"/>
+                                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                            </svg>
+                            Retry
+                        </button>
+                    </div>
+                }
+                else if (conversations.Any())
+                {
+                    <div class="conversations-list">
+                        @foreach (var convo in conversations)
+                        {
+                            <div class="conversation-card @(convo.UnreadCount > 0 ? "unread" : "")"
+                                 @onclick="() => OpenConversation(convo.Id)">
+                                <div class="avatar">
+                                    @(convo.OtherPartyName?.Substring(0, 1).ToUpper() ?? "?")
+                                </div>
+                                <div class="convo-content">
+                                    <div class="convo-header">
+                                        <span class="convo-name">@convo.OtherPartyName</span>
+                                        <span class="convo-time">@FormatTime(convo.LastMessageAt)</span>
+                                    </div>
+                                    <div class="convo-job">@convo.JobTitle</div>
+                                    <div class="convo-preview">
+                                        @if (!string.IsNullOrEmpty(convo.LastMessage))
+                                        {
+                                            @(convo.LastMessage.Length > 50
+                                                ? convo.LastMessage.Substring(0, 50) + "..."
+                                                : convo.LastMessage)
+                                        }
+                                        else
+                                        {
+                                            <span class="no-messages">No messages yet</span>
+                                        }
+                                    </div>
+                                </div>
+                                @if (convo.UnreadCount > 0)
+                                {
+                                    <div class="unread-badge">@convo.UnreadCount</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon">💬</div>
+                        <h3>No conversations yet</h3>
+                        <p>When you submit quotes or receive messages, they'll appear here</p>
+                    </div>
+                }
+            </div>
+        </PullToRefresh>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <a class="nav-tab" href="/">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a class="nav-tab" href="/jobs">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.3-4.3"></path>
+                </svg>
+                <span>Jobs</span>
+            </a>
+            <a class="nav-tab active" href="/messages">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Messages</span>
+            </a>
+            <a class="nav-tab" href="/profile">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span>Profile</span>
+            </a>
+        </nav>
+    }
+</div>
+
+<style>
+    .messages-page {
+        min-height: 100vh;
+        background: #f8f9fc;
+        padding-bottom: 100px;
+    }
+
+    .loading-center {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .loading-center.small {
+        min-height: 200px;
+    }
+
+    .loader {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e8eaed;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .not-auth {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+    }
+
+    .not-auth-icon {
+        font-size: 4rem;
+        margin-bottom: 16px;
+    }
+
+    .not-auth h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .not-auth p {
+        color: #6b7280;
+        margin: 0 0 24px;
+    }
+
+    .btn-primary {
+        padding: 14px 32px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+    }
+
+    /* Header */
+    .page-header {
+        background: #0d6efd;
+        padding: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .back-btn {
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .header-text h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: white;
+        margin: 0 0 4px;
+    }
+
+    .header-text p {
+        font-size: 0.875rem;
+        color: rgba(255, 255, 255, 0.85);
+        margin: 0;
+    }
+
+    .live-badge {
+        background: rgba(34, 197, 94, 0.9);
+        color: white;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 12px;
+        margin-left: auto;
+    }
+
+    /* Content */
+    .page-content {
+        padding: 20px 16px;
+        margin-top: -16px;
+    }
+
+    /* Conversations List */
+    .conversations-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .conversation-card {
+        background: white;
+        border-radius: 16px;
+        padding: 16px;
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .conversation-card:active {
+        transform: scale(0.98);
+        background: #f9fafb;
+    }
+
+    .conversation-card.unread {
+        background: #f0f7ff;
+        border-left: 4px solid #0d6efd;
+    }
+
+    .avatar {
+        width: 48px;
+        height: 48px;
+        background: #e7f1ff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #0d6efd;
+        flex-shrink: 0;
+    }
+
+    .convo-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .convo-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+
+    .convo-name {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .convo-time {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    .convo-job {
+        font-size: 0.75rem;
+        color: #0d6efd;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .convo-preview {
+        font-size: 0.875rem;
+        color: #6b7280;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .no-messages {
+        font-style: italic;
+        color: #9ca3af;
+    }
+
+    .unread-badge {
+        background: #0d6efd;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 700;
+        min-width: 22px;
+        height: 22px;
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+    }
+
+    /* Error State */
+    .error-state {
+        background: white;
+        border-radius: 20px;
+        padding: 48px 24px;
+        text-align: center;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .error-icon {
+        margin-bottom: 16px;
+    }
+
+    .error-state h3 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .error-state p {
+        color: #6b7280;
+        margin: 0 0 20px;
+        font-size: 0.9375rem;
+    }
+
+    .btn-retry {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    /* Empty State */
+    .empty-state {
+        background: white;
+        border-radius: 20px;
+        padding: 48px 24px;
+        text-align: center;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 16px;
+    }
+
+    .empty-state h3 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .empty-state p {
+        color: #6b7280;
+        margin: 0;
+        font-size: 0.9375rem;
+    }
+
+    /* Bottom Navigation */
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        display: flex;
+        justify-content: space-around;
+        padding: 8px 0;
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+        z-index: 1000;
+        border-radius: 24px 24px 0 0;
+    }
+
+    .nav-tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 8px 16px;
+        color: #9ca3af;
+        text-decoration: none;
+        font-size: 0.6875rem;
+        font-weight: 500;
+        transition: color 0.2s;
+    }
+
+    .nav-tab.active {
+        color: #0d6efd;
+    }
+
+    .nav-tab svg {
+        width: 24px;
+        height: 24px;
+    }
+</style>
+
+@code {
+    private Toast? toast;
+    private bool isInitialized = false;
+    private bool isLoading = true;
+    private bool hasError = false;
+    private bool isConnected = false;
+    private List<ConversationDto> conversations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        isInitialized = true;
+
+        if (Auth.IsAuthenticated)
+        {
+            await LoadConversations();
+            await ConnectSignalR();
+        }
+    }
+
+    private async Task ConnectSignalR()
+    {
+        SignalR.OnConnectionStateChanged += HandleConnectionStateChanged;
+        SignalR.OnMessageReceived += HandleMessageReceived;
+        await SignalR.ConnectAsync();
+    }
+
+    private void HandleConnectionStateChanged(bool connected)
+    {
+        isConnected = connected;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleMessageReceived(MessageDto message)
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadConversations();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadConversations()
+    {
+        isLoading = true;
+        hasError = false;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Api.GetConversationsAsync();
+            conversations = response?.Conversations ?? new();
+        }
+        catch
+        {
+            hasError = true;
+            toast?.ShowError("Failed to load messages. Pull down to retry.");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshConversations()
+    {
+        hasError = false;
+        try
+        {
+            var response = await Api.GetConversationsAsync();
+            conversations = response?.Conversations ?? new();
+            toast?.ShowSuccess("Messages refreshed!");
+        }
+        catch
+        {
+            hasError = conversations.Count == 0;
+            toast?.ShowError("Failed to refresh messages");
+        }
+        StateHasChanged();
+    }
+
+    private void OpenConversation(Guid conversationId)
+    {
+        Navigation.NavigateTo($"/chat/{conversationId}");
+    }
+
+    private string FormatTime(DateTime? dateTime)
+    {
+        if (dateTime == null) return "";
+
+        var local = dateTime.Value.ToLocalTime();
+        var now = DateTime.Now;
+
+        if (local.Date == now.Date)
+            return local.ToString("h:mm tt");
+        if (local.Date == now.Date.AddDays(-1))
+            return "Yesterday";
+        if ((now - local).TotalDays < 7)
+            return local.ToString("ddd");
+        return local.ToString("MMM d");
+    }
+
+    private void GoToLogin() => Navigation.NavigateTo("/login");
+    private void GoBack() => Navigation.NavigateTo("/");
+
+    public ValueTask DisposeAsync()
+    {
+        SignalR.OnConnectionStateChanged -= HandleConnectionStateChanged;
+        SignalR.OnMessageReceived -= HandleMessageReceived;
+        return ValueTask.CompletedTask;
+    }
+}

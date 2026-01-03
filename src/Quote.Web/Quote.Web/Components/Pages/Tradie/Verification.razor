@@ -1,0 +1,577 @@
+@page "/tradie/verification"
+@using Quote.Shared.DTOs
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Verification - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="mb-4">
+        <h1 class="h3 mb-1">Verification Centre</h1>
+        <p class="text-muted">Get verified to build trust and win more jobs</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle me-2"></i>@successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle me-2"></i>@errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">Loading verification status...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Verification Level Banner -->
+        <div class="card border-0 shadow-sm mb-4 @GetLevelBannerClass()">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h4 class="mb-1">
+                            <i class="bi @GetLevelIcon() me-2"></i>
+                            Verification Level: @(status?.OverallVerificationLevel ?? "None")
+                        </h4>
+                        <p class="mb-0 opacity-75">@GetLevelDescription()</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        @if (status?.EarnedBadges?.Any() == true)
+                        {
+                            <div class="d-flex flex-wrap justify-content-end gap-1">
+                                @foreach (var badge in status.EarnedBadges)
+                                {
+                                    <span class="badge bg-light text-dark border">
+                                        <i class="bi bi-patch-check-fill text-success me-1"></i>@badge
+                                    </span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Identity Verification -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-bottom-0 pt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Identity Verification</h5>
+                            @if (status?.IdentityVerified == true)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check-lg me-1"></i>Verified</span>
+                            }
+                            else if (status?.IdentityStatus == "Pending")
+                            {
+                                <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Pending Review</span>
+                            }
+                            else if (status?.IdentityStatus == "Rejected")
+                            {
+                                <span class="badge bg-danger"><i class="bi bi-x-lg me-1"></i>Rejected</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (status?.IdentityVerified == true)
+                        {
+                            <p class="text-muted mb-0">
+                                <i class="bi bi-shield-check text-success me-2"></i>
+                                Your identity has been verified. Customers can trust that you are who you say you are.
+                            </p>
+                        }
+                        else if (status?.IdentityStatus == "Pending")
+                        {
+                            <p class="text-muted mb-0">
+                                Your documents are being reviewed. This usually takes less than 1 hour during business hours.
+                            </p>
+                        }
+                        else if (status?.IdentityStatus == "Rejected")
+                        {
+                            <div class="alert alert-danger mb-3">
+                                <strong>Rejection reason:</strong> @(status.IdentityNotes ?? "Please resubmit with clearer documents")
+                            </div>
+                            <button class="btn btn-primary w-100" @onclick="() => ShowUploadModal(UploadType.Identity)">
+                                <i class="bi bi-upload me-2"></i>Resubmit Documents
+                            </button>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-3">Upload a photo ID (Driver's Licence, Passport, or Proof of Age card) to verify your identity.</p>
+                            <button class="btn btn-primary w-100" @onclick="() => ShowUploadModal(UploadType.Identity)">
+                                <i class="bi bi-upload me-2"></i>Upload ID Document
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insurance Verification -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-bottom-0 pt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Insurance</h5>
+                            @if (status?.InsuranceVerified == true)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check-lg me-1"></i>Verified</span>
+                            }
+                            else if (status?.InsuranceStatus == "Pending")
+                            {
+                                <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Pending</span>
+                            }
+                            else if (status?.InsuranceStatus == "Rejected")
+                            {
+                                <span class="badge bg-danger"><i class="bi bi-x-lg me-1"></i>Rejected</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (status?.InsuranceVerified == true)
+                        {
+                            <p class="text-success mb-2">
+                                <i class="bi bi-check-circle me-2"></i>Insurance verified
+                            </p>
+                            @if (status.InsuranceExpiryDate.HasValue)
+                            {
+                                <p class="text-muted small mb-0">
+                                    Expires: @status.InsuranceExpiryDate.Value.ToString("dd MMM yyyy")
+                                </p>
+                            }
+                        }
+                        else if (status?.InsuranceStatus == "Pending")
+                        {
+                            <p class="text-muted mb-0">Your insurance certificate is being reviewed.</p>
+                        }
+                        else if (status?.InsuranceStatus == "Rejected")
+                        {
+                            <div class="alert alert-danger mb-3">
+                                <strong>Rejection reason:</strong> @(status.InsuranceNotes ?? "Please resubmit")
+                            </div>
+                            <button class="btn btn-primary w-100" @onclick="() => ShowUploadModal(UploadType.Insurance)">
+                                <i class="bi bi-upload me-2"></i>Resubmit Certificate
+                            </button>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-3">Upload your public liability insurance certificate.</p>
+                            <button class="btn btn-outline-primary w-100" @onclick="() => ShowUploadModal(UploadType.Insurance)">
+                                <i class="bi bi-upload me-2"></i>Upload Insurance
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Police Check -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-bottom-0 pt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-file-earmark-check me-2"></i>Police Check</h5>
+                            @if (status?.PoliceCheckVerified == true)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-check-lg me-1"></i>Verified</span>
+                            }
+                            else if (status?.PoliceCheckStatus == "Pending")
+                            {
+                                <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Pending</span>
+                            }
+                            else if (status?.PoliceCheckStatus == "Rejected")
+                            {
+                                <span class="badge bg-danger"><i class="bi bi-x-lg me-1"></i>Rejected</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (status?.PoliceCheckVerified == true)
+                        {
+                            <p class="text-success mb-0">
+                                <i class="bi bi-check-circle me-2"></i>Police check verified
+                            </p>
+                        }
+                        else if (status?.PoliceCheckStatus == "Pending")
+                        {
+                            <p class="text-muted mb-0">Your police check is being reviewed.</p>
+                        }
+                        else if (status?.PoliceCheckStatus == "Rejected")
+                        {
+                            <div class="alert alert-danger mb-3">
+                                <strong>Rejection reason:</strong> @(status.PoliceCheckNotes ?? "Please resubmit")
+                            </div>
+                            <button class="btn btn-primary w-100" @onclick="() => ShowUploadModal(UploadType.PoliceCheck)">
+                                <i class="bi bi-upload me-2"></i>Resubmit
+                            </button>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-3">Upload your national police check certificate.</p>
+                            <button class="btn btn-outline-primary w-100" @onclick="() => ShowUploadModal(UploadType.PoliceCheck)">
+                                <i class="bi bi-upload me-2"></i>Upload Police Check
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trade Licences -->
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-bottom-0 pt-3">
+                        <h5 class="mb-0"><i class="bi bi-award me-2"></i>Trade Licences</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (status?.Licences?.Any() == true)
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var licence in status.Licences)
+                                {
+                                    <div class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>@licence.TradeCategory</strong>
+                                            <br><small class="text-muted">@licence.LicenceNumber</small>
+                                        </div>
+                                        <span class="badge @GetLicenceStatusClass(licence.Status)">@licence.Status</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">No trade licences registered. Add your trade licences in your profile settings.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Upload Modal -->
+@if (showUploadModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@GetModalTitle()</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal" disabled="@isUploading"></button>
+                </div>
+                <div class="modal-body">
+                    @if (currentUploadType == UploadType.Identity)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Document Type *</label>
+                            <select class="form-select" @bind="documentType">
+                                <option value="1">Driver's Licence</option>
+                                <option value="2">Passport</option>
+                                <option value="3">Proof of Age Card</option>
+                                <option value="4">Photo Card</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Document Number</label>
+                            <input type="text" class="form-control" @bind="documentNumber" placeholder="e.g., 12345678">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Issuing State</label>
+                            <select class="form-select" @bind="issuingState">
+                                <option value="">Select state...</option>
+                                <option value="NSW">NSW</option>
+                                <option value="VIC">VIC</option>
+                                <option value="QLD">QLD</option>
+                                <option value="WA">WA</option>
+                                <option value="SA">SA</option>
+                                <option value="TAS">TAS</option>
+                                <option value="ACT">ACT</option>
+                                <option value="NT">NT</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Expiry Date</label>
+                            <input type="date" class="form-control" @bind="expiryDate">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Front of Document *</label>
+                            <InputFile class="form-control" OnChange="OnFrontFileSelected" accept=".jpg,.jpeg,.png,.pdf" />
+                            @if (frontFile != null)
+                            {
+                                <small class="text-success"><i class="bi bi-check me-1"></i>@frontFile.Name</small>
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Back of Document (if applicable)</label>
+                            <InputFile class="form-control" OnChange="OnBackFileSelected" accept=".jpg,.jpeg,.png,.pdf" />
+                            @if (backFile != null)
+                            {
+                                <small class="text-success"><i class="bi bi-check me-1"></i>@backFile.Name</small>
+                            }
+                        </div>
+                    }
+                    else if (currentUploadType == UploadType.Insurance)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Policy Number</label>
+                            <input type="text" class="form-control" @bind="documentNumber" placeholder="e.g., POL-123456">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Expiry Date *</label>
+                            <input type="date" class="form-control" @bind="expiryDate">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Insurance Certificate *</label>
+                            <InputFile class="form-control" OnChange="OnFrontFileSelected" accept=".jpg,.jpeg,.png,.pdf" />
+                            @if (frontFile != null)
+                            {
+                                <small class="text-success"><i class="bi bi-check me-1"></i>@frontFile.Name</small>
+                            }
+                        </div>
+                    }
+                    else if (currentUploadType == UploadType.PoliceCheck)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Certificate Number</label>
+                            <input type="text" class="form-control" @bind="documentNumber" placeholder="e.g., NPC-123456">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Police Check Certificate *</label>
+                            <InputFile class="form-control" OnChange="OnFrontFileSelected" accept=".jpg,.jpeg,.png,.pdf" />
+                            @if (frontFile != null)
+                            {
+                                <small class="text-success"><i class="bi bi-check me-1"></i>@frontFile.Name</small>
+                            }
+                        </div>
+                    }
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Accepted formats: JPG, PNG, PDF. Max size: 10MB
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal" disabled="@isUploading">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SubmitUpload" disabled="@(isUploading || frontFile == null)">
+                        @if (isUploading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <text>Uploading...</text>
+                        }
+                        else
+                        {
+                            <i class="bi bi-upload me-2"></i>
+                            <text>Submit for Review</text>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private TradieVerificationStatusResponseDto? status;
+    private bool isLoading = true;
+    private bool showUploadModal = false;
+    private bool isUploading = false;
+    private UploadType currentUploadType;
+    private string? successMessage;
+    private string? errorMessage;
+
+    // Form fields
+    private int documentType = 1;
+    private string? documentNumber;
+    private string? issuingState;
+    private DateTime? expiryDate;
+    private IBrowserFile? frontFile;
+    private IBrowserFile? backFile;
+
+    private enum UploadType { Identity, Insurance, PoliceCheck }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatus();
+    }
+
+    private async Task LoadStatus()
+    {
+        try
+        {
+            status = await Http.GetFromJsonAsync<TradieVerificationStatusResponseDto>("api/verification/status");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            status = new TradieVerificationStatusResponseDto();
+        }
+        catch
+        {
+            errorMessage = "Failed to load verification status";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ShowUploadModal(UploadType type)
+    {
+        currentUploadType = type;
+        documentType = 1;
+        documentNumber = null;
+        issuingState = null;
+        expiryDate = null;
+        frontFile = null;
+        backFile = null;
+        showUploadModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showUploadModal = false;
+    }
+
+    private void OnFrontFileSelected(InputFileChangeEventArgs e)
+    {
+        frontFile = e.File;
+    }
+
+    private void OnBackFileSelected(InputFileChangeEventArgs e)
+    {
+        backFile = e.File;
+    }
+
+    private async Task SubmitUpload()
+    {
+        if (frontFile == null) return;
+
+        isUploading = true;
+        errorMessage = null;
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+
+            // Add front document
+            var frontStream = frontFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var frontContent = new StreamContent(frontStream);
+            frontContent.Headers.ContentType = new MediaTypeHeaderValue(frontFile.ContentType);
+            content.Add(frontContent, "documentFront", frontFile.Name);
+
+            // Add back document if provided
+            if (backFile != null)
+            {
+                var backStream = backFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                var backContent = new StreamContent(backStream);
+                backContent.Headers.ContentType = new MediaTypeHeaderValue(backFile.ContentType);
+                content.Add(backContent, "documentBack", backFile.Name);
+            }
+
+            string endpoint;
+            switch (currentUploadType)
+            {
+                case UploadType.Identity:
+                    content.Add(new StringContent(documentType.ToString()), "DocumentType");
+                    if (!string.IsNullOrEmpty(documentNumber))
+                        content.Add(new StringContent(documentNumber), "DocumentNumber");
+                    if (!string.IsNullOrEmpty(issuingState))
+                        content.Add(new StringContent(issuingState), "IssuingState");
+                    if (expiryDate.HasValue)
+                        content.Add(new StringContent(expiryDate.Value.ToString("o")), "ExpiryDate");
+                    endpoint = "api/verification/identity";
+                    break;
+
+                case UploadType.Insurance:
+                    if (!string.IsNullOrEmpty(documentNumber))
+                        content.Add(new StringContent(documentNumber), "policyNumber");
+                    if (expiryDate.HasValue)
+                        content.Add(new StringContent(expiryDate.Value.ToString("o")), "expiryDate");
+                    endpoint = "api/verification/insurance";
+                    break;
+
+                case UploadType.PoliceCheck:
+                    if (!string.IsNullOrEmpty(documentNumber))
+                        content.Add(new StringContent(documentNumber), "certificateNumber");
+                    endpoint = "api/verification/police-check";
+                    break;
+
+                default:
+                    throw new InvalidOperationException();
+            }
+
+            var response = await Http.PostAsync(endpoint, content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Documents submitted successfully! We'll review them within 1 hour during business hours.";
+                showUploadModal = false;
+                await LoadStatus();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Upload failed: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private string GetModalTitle() => currentUploadType switch
+    {
+        UploadType.Identity => "Upload Identity Document",
+        UploadType.Insurance => "Upload Insurance Certificate",
+        UploadType.PoliceCheck => "Upload Police Check",
+        _ => "Upload Document"
+    };
+
+    private string GetLevelBannerClass() => status?.OverallVerificationLevel switch
+    {
+        "Premium" => "bg-warning text-dark",
+        "Verified" => "bg-success text-white",
+        "Basic" => "bg-primary text-white",
+        _ => "bg-secondary text-white"
+    };
+
+    private string GetLevelIcon() => status?.OverallVerificationLevel switch
+    {
+        "Premium" => "bi-star-fill",
+        "Verified" => "bi-patch-check-fill",
+        "Basic" => "bi-person-check",
+        _ => "bi-person"
+    };
+
+    private string GetLevelDescription() => status?.OverallVerificationLevel switch
+    {
+        "Premium" => "You have full verification including identity, licences, and insurance.",
+        "Verified" => "You have identity and trade licence verification.",
+        "Basic" => "You have basic identity verification.",
+        _ => "Complete verifications to build trust with customers."
+    };
+
+    private string GetLicenceStatusClass(string status) => status switch
+    {
+        "Verified" => "bg-success",
+        "Pending" => "bg-warning text-dark",
+        "Rejected" => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

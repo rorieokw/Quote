@@ -1,0 +1,237 @@
+/* Top Navigation Bar */
+.top-row {
+    height: 64px;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.top-row .container-fluid {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    height: 100%;
+}
+
+/* Brand */
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 1.125rem;
+    color: #1f2933;
+    letter-spacing: -0.01em;
+}
+
+.brand-icon {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, #0f6cfb 0%, #5c9dff 100%);
+    color: #fff;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.125rem;
+    box-shadow: 0 4px 12px rgba(15, 108, 251, 0.25);
+}
+
+.brand-text {
+    color: #0f6cfb;
+    font-weight: 700;
+}
+
+/* Hamburger Toggle */
+.navbar-toggler {
+    appearance: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    transition: background 0.15s ease;
+}
+
+.navbar-toggler:active {
+    background: #f0f2f5;
+}
+
+.toggler-icon {
+    width: 22px;
+    height: 2px;
+    background: #374151;
+    position: relative;
+    border-radius: 2px;
+}
+
+.toggler-icon::before,
+.toggler-icon::after {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 2px;
+    background: #374151;
+    border-radius: 2px;
+    left: 0;
+}
+
+.toggler-icon::before {
+    top: -7px;
+}
+
+.toggler-icon::after {
+    top: 7px;
+}
+
+/* Overlay */
+.nav-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 998;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.nav-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Slide-out Navigation */
+.nav-scrollable {
+    position: fixed;
+    top: 0;
+    right: -300px;
+    width: 300px;
+    height: 100vh;
+    background: #fff;
+    z-index: 999;
+    box-shadow: -8px 0 40px rgba(0, 0, 0, 0.12);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    padding: 20px 12px;
+}
+
+.nav-scrollable.show {
+    right: 0;
+}
+
+/* Navigation Items */
+.nav-item {
+    margin-bottom: 4px;
+}
+
+.nav-item ::deep .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    color: #374151;
+    text-decoration: none;
+    border-radius: 14px;
+    font-weight: 500;
+    font-size: 0.9375rem;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.nav-item ::deep .nav-link:active {
+    background: #f7f8fb;
+    transform: scale(0.98);
+}
+
+.nav-item ::deep .nav-link.active {
+    background: linear-gradient(135deg, #e8f1ff 0%, #f4f7ff 100%);
+    color: #0f6cfb;
+    font-weight: 600;
+    border-color: #dce7ff;
+}
+
+.nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.nav-icon svg {
+    stroke: currentColor;
+}
+
+/* Divider */
+.nav-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #e5e7eb 20%, #e5e7eb 80%, transparent);
+    margin: 16px 12px;
+}
+
+/* Logout Button */
+.logout-btn {
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: #dc2626 !important;
+}
+
+.logout-btn:active {
+    background: #fef2f2 !important;
+    color: #dc2626 !important;
+}
+
+/* Desktop styles */
+@media (min-width: 768px) {
+    .navbar-toggler {
+        display: none;
+    }
+
+    .nav-overlay {
+        display: none;
+    }
+
+    .nav-scrollable {
+        position: static;
+        width: auto;
+        height: auto;
+        box-shadow: none;
+        right: 0;
+        padding: 0;
+        display: flex;
+        background: transparent;
+    }
+
+    .nav-scrollable .flex-column {
+        flex-direction: row !important;
+        gap: 0.5rem;
+    }
+
+    .nav-item {
+        margin-bottom: 0;
+    }
+
+    .nav-divider {
+        display: none;
+    }
+}

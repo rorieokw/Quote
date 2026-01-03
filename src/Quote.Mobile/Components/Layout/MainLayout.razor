@@ -1,0 +1,21 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+@{
+    var uri = Navigation.Uri;
+    var path = new Uri(uri).AbsolutePath;
+    var hideTopNav = path == "/" || path == "/login" || path == "/register" || path == "/profile" || path == "/my-quotes" || path == "/jobs" || path == "/templates" || path.StartsWith("/job/");
+}
+
+<div class="page">
+    @if (!hideTopNav)
+    {
+        <NavMenu />
+    }
+
+    <main>
+        <article class="content">
+            @Body
+        </article>
+    </main>
+</div>

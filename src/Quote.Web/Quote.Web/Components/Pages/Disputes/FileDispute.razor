@@ -1,0 +1,259 @@
+@page "/disputes/file"
+@page "/disputes/file/{JobQuoteId:guid}"
+@using Quote.Shared.DTOs
+@using Quote.Web.Client.Services
+@inject DisputeService DisputeService
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>File a Dispute - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/disputes">My Disputes</a></li>
+                    <li class="breadcrumb-item active">File New Dispute</li>
+                </ol>
+            </nav>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-warning bg-opacity-10">
+                    <h4 class="mb-0">
+                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                        File a Dispute
+                    </h4>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>@errorMessage
+                        </div>
+                    }
+
+                    @if (isSubmitted)
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-check-circle text-success fs-1"></i>
+                            <h4 class="mt-3">Dispute Filed Successfully</h4>
+                            <p class="text-muted">Your dispute has been submitted and will be reviewed by our team.</p>
+                            <a href="/disputes" class="btn btn-primary">View My Disputes</a>
+                        </div>
+                    }
+                    else if (isLoading)
+                    {
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary"></div>
+                            <p class="mt-2">Loading your jobs...</p>
+                        </div>
+                    }
+                    else if (!acceptedQuotes.Any())
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-inbox text-muted fs-1"></i>
+                            <h5 class="mt-3">No Active Jobs</h5>
+                            <p class="text-muted">You can only file disputes for jobs with accepted quotes.</p>
+                            <a href="/jobs" class="btn btn-outline-primary">Browse Jobs</a>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mb-4">
+                            <p class="text-muted mb-0">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Disputes help resolve issues between customers and tradies. Please provide accurate details to help us investigate.
+                            </p>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Select Job <span class="text-danger">*</span></label>
+                            <select class="form-select" @bind="selectedQuoteId">
+                                <option value="">-- Select a job --</option>
+                                @foreach (var quote in acceptedQuotes)
+                                {
+                                    <option value="@quote.QuoteId">@quote.JobTitle - $@quote.TotalAmount.ToString("N0") (@quote.TradieName)</option>
+                                }
+                            </select>
+                        </div>
+
+                        @if (selectedQuoteId != Guid.Empty)
+                        {
+                            var selectedQuote = acceptedQuotes.FirstOrDefault(q => q.QuoteId == selectedQuoteId);
+                            if (selectedQuote != null)
+                            {
+                                <div class="card bg-light mb-4">
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <h6>@selectedQuote.JobTitle</h6>
+                                                <p class="mb-0 text-muted">Tradie: @selectedQuote.TradieName</p>
+                                            </div>
+                                            <div class="col-md-6 text-md-end">
+                                                <p class="h5 text-success mb-0">$@selectedQuote.TotalAmount.ToString("N2")</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+
+                        <div class="mb-4">
+                            <label class="form-label">Reason for Dispute <span class="text-danger">*</span></label>
+                            <select class="form-select" @bind="selectedReason">
+                                <option value="">-- Select reason --</option>
+                                <option value="WorkQuality">Work Quality - Work is below expected standard</option>
+                                <option value="NonCompletion">Non-Completion - Work was not completed</option>
+                                <option value="PaymentIssue">Payment Issue - Problems with payment/refund</option>
+                                <option value="Communication">Communication - Unresponsive or unprofessional</option>
+                                <option value="Other">Other - Other issues not listed</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Description <span class="text-danger">*</span></label>
+                            <textarea class="form-control" rows="5" @bind="description"
+                                placeholder="Please describe the issue in detail. Include dates, specific problems, and what you've already tried to resolve the issue..."></textarea>
+                            <small class="text-muted">Be specific and include relevant details to help us understand the situation.</small>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <h6 class="alert-heading"><i class="bi bi-lightbulb me-2"></i>Before filing</h6>
+                            <ul class="mb-0 small">
+                                <li>Have you tried contacting the other party directly?</li>
+                                <li>Do you have evidence (photos, messages, receipts)?</li>
+                                <li>Is the issue covered by our <a href="/terms">Terms of Service</a>?</li>
+                            </ul>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="/disputes" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i>Cancel
+                            </a>
+                            <button class="btn btn-warning" @onclick="SubmitDispute" disabled="@isSubmitting">
+                                @if (isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                <i class="bi bi-exclamation-triangle me-1"></i>Submit Dispute
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Guid? JobQuoteId { get; set; }
+
+    private List<AcceptedQuoteInfo> acceptedQuotes = new();
+    private bool isLoading = true;
+    private bool isSubmitting = false;
+    private bool isSubmitted = false;
+    private string? errorMessage;
+
+    private Guid selectedQuoteId = Guid.Empty;
+    private string selectedReason = "";
+    private string description = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAcceptedQuotes();
+
+        if (JobQuoteId.HasValue)
+        {
+            selectedQuoteId = JobQuoteId.Value;
+        }
+    }
+
+    private async Task LoadAcceptedQuotes()
+    {
+        isLoading = true;
+
+        try
+        {
+            // Get user's accepted quotes (jobs where they're either customer or tradie)
+            var response = await Http.GetFromJsonAsync<List<AcceptedQuoteInfo>>("api/quotes/my-accepted");
+            if (response != null)
+            {
+                acceptedQuotes = response;
+            }
+        }
+        catch
+        {
+            // Fallback - show empty list
+            acceptedQuotes = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SubmitDispute()
+    {
+        errorMessage = null;
+
+        if (selectedQuoteId == Guid.Empty)
+        {
+            errorMessage = "Please select a job.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(selectedReason))
+        {
+            errorMessage = "Please select a reason for the dispute.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            errorMessage = "Please provide a description of the issue.";
+            return;
+        }
+
+        if (description.Length < 20)
+        {
+            errorMessage = "Please provide more detail in your description (at least 20 characters).";
+            return;
+        }
+
+        isSubmitting = true;
+
+        try
+        {
+            var request = new CreateDisputeRequest(selectedQuoteId, selectedReason, description);
+            var response = await DisputeService.CreateDisputeAsync(request);
+
+            if (response != null)
+            {
+                isSubmitted = true;
+            }
+            else
+            {
+                errorMessage = "Failed to submit dispute. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private class AcceptedQuoteInfo
+    {
+        public Guid QuoteId { get; set; }
+        public Guid JobId { get; set; }
+        public string JobTitle { get; set; } = "";
+        public string TradieName { get; set; } = "";
+        public decimal TotalAmount { get; set; }
+    }
+}

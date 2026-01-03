@@ -1,0 +1,420 @@
+@page "/jobs"
+@using Quote.Mobile.Components.Shared
+@inject ApiService Api
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<Toast @ref="toast" />
+
+<div class="jobs-page">
+    <!-- Header -->
+    <div class="page-header">
+        <h1>Browse Jobs</h1>
+        <p>Find work opportunities near you</p>
+    </div>
+
+    <!-- Content -->
+    <PullToRefresh OnRefresh="RefreshJobs">
+        <div class="page-content">
+            @if (isLoading && !jobs.Any())
+            {
+                <!-- Skeleton Loading -->
+                <div class="jobs-list">
+                    <SkeletonCard Type="job" />
+                    <SkeletonCard Type="job" />
+                    <SkeletonCard Type="job" />
+                </div>
+            }
+            else if (hasError)
+            {
+                <div class="error-state">
+                    <div class="error-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                    </div>
+                    <h3>Unable to load jobs</h3>
+                    <p>Please check your connection and try again</p>
+                    <button class="btn-retry" @onclick="LoadJobs">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                        </svg>
+                        Retry
+                    </button>
+                </div>
+            }
+            else if (jobs.Any())
+            {
+                <div class="jobs-list">
+                    @foreach (var job in jobs)
+                    {
+                        <div class="job-card" @onclick="() => GoToJob(job.Id)">
+                            <div class="job-top">
+                                <span class="job-category">@job.TradeCategoryName</span>
+                                @if (job.BudgetMax.HasValue)
+                                {
+                                    <span class="job-budget">$@job.BudgetMax.Value.ToString("N0")</span>
+                                }
+                            </div>
+                            <h3 class="job-title">@job.Title</h3>
+                            @if (!string.IsNullOrEmpty(job.Description))
+                            {
+                                <p class="job-desc">@job.Description</p>
+                            }
+                            <div class="job-meta">
+                                <span class="meta-item">
+                                    <span>📍</span> @job.SuburbName
+                                </span>
+                                @if (!string.IsNullOrEmpty(job.Postcode))
+                                {
+                                    <span class="meta-item">
+                                        <span>📮</span> @job.Postcode
+                                    </span>
+                                }
+                            </div>
+                            <div class="job-footer">
+                                <span class="job-date">Posted @GetTimeAgo(job.CreatedAt)</span>
+                                <span class="job-quotes">@job.QuoteCount quotes</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <h3>No jobs available</h3>
+                    <p>Check back later for new opportunities</p>
+                </div>
+            }
+        </div>
+    </PullToRefresh>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+        <a class="nav-tab" href="/">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Home</span>
+        </a>
+        <a class="nav-tab active" href="/jobs">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.3-4.3" stroke="white" stroke-width="2"></path>
+            </svg>
+            <span>Jobs</span>
+        </a>
+        <a class="nav-tab" href="/messages">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Messages</span>
+        </a>
+        <a class="nav-tab" href="/profile">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>Profile</span>
+        </a>
+    </nav>
+</div>
+
+<style>
+    .jobs-page {
+        min-height: 100vh;
+        background: #f8f9fc;
+        padding-bottom: 100px;
+    }
+
+    /* Header */
+    .page-header {
+        background: #0d6efd;
+        padding: 24px 20px 32px;
+        color: white;
+    }
+
+    .page-header h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0 0 4px;
+    }
+
+    .page-header p {
+        font-size: 0.875rem;
+        opacity: 0.85;
+        margin: 0;
+    }
+
+    /* Content */
+    .page-content {
+        padding: 20px 16px;
+        margin-top: -16px;
+    }
+
+    /* Jobs List */
+    .jobs-list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .job-card {
+        background: white;
+        border-radius: 20px;
+        padding: 18px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        cursor: pointer;
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .job-card:active {
+        transform: scale(0.98);
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    .job-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .job-category {
+        background: #e7f1ff;
+        color: #0d6efd;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 5px 12px;
+        border-radius: 10px;
+    }
+
+    .job-budget {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #10b981;
+    }
+
+    .job-title {
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 8px;
+        line-height: 1.4;
+    }
+
+    .job-desc {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin: 0 0 12px;
+        line-height: 1.5;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .job-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 12px;
+    }
+
+    .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.8125rem;
+        color: #6b7280;
+    }
+
+    .job-footer {
+        display: flex;
+        justify-content: space-between;
+        padding-top: 12px;
+        border-top: 1px solid #f3f4f6;
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    .job-quotes {
+        color: #0d6efd;
+        font-weight: 600;
+    }
+
+    /* Error State */
+    .error-state {
+        background: white;
+        border-radius: 20px;
+        padding: 48px 24px;
+        text-align: center;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .error-icon {
+        margin-bottom: 16px;
+    }
+
+    .error-state h3 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .error-state p {
+        color: #6b7280;
+        margin: 0 0 20px;
+        font-size: 0.9375rem;
+    }
+
+    .btn-retry {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    /* Empty State */
+    .empty-state {
+        background: white;
+        border-radius: 20px;
+        padding: 48px 24px;
+        text-align: center;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 16px;
+    }
+
+    .empty-state h3 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .empty-state p {
+        color: #6b7280;
+        margin: 0;
+        font-size: 0.9375rem;
+    }
+
+    /* Bottom Navigation */
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        display: flex;
+        justify-content: space-around;
+        padding: 8px 0;
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+        z-index: 1000;
+        border-radius: 24px 24px 0 0;
+    }
+
+    .nav-tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 8px 16px;
+        color: #9ca3af;
+        text-decoration: none;
+        font-size: 0.6875rem;
+        font-weight: 500;
+        transition: color 0.2s;
+    }
+
+    .nav-tab.active {
+        color: #0d6efd;
+    }
+
+    .nav-tab svg {
+        width: 24px;
+        height: 24px;
+    }
+</style>
+
+@code {
+    private Toast? toast;
+    private bool isLoading = true;
+    private bool hasError = false;
+    private List<JobDto> jobs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadJobs();
+    }
+
+    private async Task LoadJobs()
+    {
+        isLoading = true;
+        hasError = false;
+        StateHasChanged();
+
+        try
+        {
+            jobs = await Api.GetJobsAsync();
+        }
+        catch
+        {
+            hasError = true;
+            toast?.ShowError("Failed to load jobs. Pull down to retry.");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshJobs()
+    {
+        hasError = false;
+        try
+        {
+            jobs = await Api.GetJobsAsync();
+            toast?.ShowSuccess("Jobs refreshed!");
+        }
+        catch
+        {
+            hasError = jobs.Count == 0;
+            toast?.ShowError("Failed to refresh jobs");
+        }
+        StateHasChanged();
+    }
+
+    private void GoToJob(Guid jobId)
+    {
+        Navigation.NavigateTo($"/job/{jobId}");
+    }
+
+    private string GetTimeAgo(DateTime date)
+    {
+        var diff = DateTime.UtcNow - date;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        return date.ToString("d MMM");
+    }
+}

@@ -1,0 +1,841 @@
+@page "/material-bundles"
+@using Quote.Mobile.Components.Shared
+@inject ApiService Api
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<Toast @ref="toast" />
+
+<div class="bundles-page">
+    <!-- Header -->
+    <div class="page-header">
+        <button class="back-btn" @onclick="GoBack">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+        </button>
+        <h1>Material Bundles</h1>
+        <button class="add-btn" @onclick="StartCreateBundle">+</button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-center">
+            <div class="loader"></div>
+        </div>
+    }
+    else if (!bundles.Any() && !showForm)
+    {
+        <div class="empty-state">
+            <div class="empty-icon">📦</div>
+            <h2>No Bundles Yet</h2>
+            <p>Save time by creating reusable material bundles for your common jobs</p>
+            <button class="btn-primary" @onclick="StartCreateBundle">Create Your First Bundle</button>
+        </div>
+    }
+    else
+    {
+        <!-- Create/Edit Form -->
+        @if (showForm)
+        {
+            <div class="bundle-form">
+                <h2>@(isEditing ? "Edit Bundle" : "New Bundle")</h2>
+
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="form-error">@formError</div>
+                }
+
+                <div class="form-group">
+                    <label>Bundle Name *</label>
+                    <input type="text" @bind="formName" placeholder="e.g., Bathroom Renovation Kit" />
+                </div>
+
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea @bind="formDescription" placeholder="Optional description..."></textarea>
+                </div>
+
+                <h3>Materials</h3>
+                @foreach (var (item, index) in formItems.Select((m, i) => (m, i)))
+                {
+                    <div class="form-item">
+                        <div class="item-row">
+                            <input type="text" @bind="item.ProductName" placeholder="Product name *" class="input-product" />
+                            <button class="remove-btn" @onclick="() => RemoveItem(index)">×</button>
+                        </div>
+                        <div class="item-row details">
+                            <input type="number" @bind="item.Quantity" placeholder="Qty" class="input-qty" step="0.01" />
+                            <input type="text" @bind="item.Unit" placeholder="Unit" class="input-unit" />
+                            <div class="input-prefix">
+                                <span>$</span>
+                                <input type="number" @bind="item.UnitPrice" placeholder="Price" step="0.01" />
+                            </div>
+                        </div>
+                        <input type="text" @bind="item.SupplierName" placeholder="Supplier (optional)" class="input-full" />
+                    </div>
+                }
+
+                <button class="add-item-btn" @onclick="AddItem">+ Add Material</button>
+
+                <div class="form-total">
+                    <span>Bundle Total:</span>
+                    <span class="total-amount">$@CalculateTotal().ToString("N2")</span>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn-cancel" @onclick="CancelForm">Cancel</button>
+                    <button class="btn-save" @onclick="SaveBundle" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <div class="btn-loader"></div>
+                        }
+                        else
+                        {
+                            <span>@(isEditing ? "Save Changes" : "Create Bundle")</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Bundles List -->
+        @if (!showForm)
+        {
+            <div class="bundles-list">
+                @foreach (var bundle in bundles)
+                {
+                    <div class="bundle-card">
+                        <div class="bundle-header">
+                            <div class="bundle-info">
+                                <h3>@bundle.Name</h3>
+                                @if (!string.IsNullOrEmpty(bundle.Description))
+                                {
+                                    <p class="bundle-desc">@bundle.Description</p>
+                                }
+                            </div>
+                            <div class="bundle-actions">
+                                <button class="action-btn edit" @onclick="() => StartEditBundle(bundle)">Edit</button>
+                                <button class="action-btn delete" @onclick="() => DeleteBundle(bundle)">Delete</button>
+                            </div>
+                        </div>
+                        <div class="bundle-stats">
+                            <div class="stat">
+                                <span class="stat-value">@bundle.ItemCount</span>
+                                <span class="stat-label">Items</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">$@bundle.TotalCost.ToString("N0")</span>
+                                <span class="stat-label">Total</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">@bundle.UsageCount</span>
+                                <span class="stat-label">Used</span>
+                            </div>
+                        </div>
+                        @if (bundle.Items.Any())
+                        {
+                            <div class="bundle-items">
+                                @foreach (var item in bundle.Items.Take(3))
+                                {
+                                    <div class="mini-item">
+                                        <span class="item-name">@item.ProductName</span>
+                                        <span class="item-qty">×@item.DefaultQuantity</span>
+                                        <span class="item-price">$@item.TotalPrice.ToString("N2")</span>
+                                    </div>
+                                }
+                                @if (bundle.Items.Count > 3)
+                                {
+                                    <div class="more-items">+@(bundle.Items.Count - 3) more items</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .bundles-page {
+        min-height: 100vh;
+        background: #f8f9fc;
+        padding-bottom: 24px;
+    }
+
+    .page-header {
+        background: white;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .back-btn {
+        width: 40px;
+        height: 40px;
+        background: #f3f4f6;
+        border: none;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        cursor: pointer;
+    }
+
+    .page-header h1 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+        flex: 1;
+    }
+
+    .add-btn {
+        width: 40px;
+        height: 40px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 1.5rem;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .loading-center {
+        min-height: 60vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .loader {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e8eaed;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+        padding: 60px 24px;
+        text-align: center;
+    }
+
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 16px;
+    }
+
+    .empty-state h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .empty-state p {
+        color: #6b7280;
+        margin: 0 0 24px;
+        max-width: 280px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .btn-primary {
+        padding: 14px 32px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    /* Form */
+    .bundle-form {
+        background: white;
+        margin: 16px;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+
+    .bundle-form h2 {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 16px;
+    }
+
+    .bundle-form h3 {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: #374151;
+        margin: 16px 0 12px;
+    }
+
+    .form-error {
+        background: #fef2f2;
+        color: #dc2626;
+        padding: 12px 14px;
+        border-radius: 12px;
+        font-size: 0.875rem;
+        margin-bottom: 16px;
+    }
+
+    .form-group {
+        margin-bottom: 14px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        background: #f9fafb;
+        color: #1f2937;
+        box-sizing: border-box;
+    }
+
+    .form-group textarea {
+        min-height: 80px;
+        resize: none;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+        outline: none;
+        border-color: #0d6efd;
+        background: white;
+    }
+
+    .form-item {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+        border: 1px solid #e5e7eb;
+    }
+
+    .item-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .item-row.details {
+        margin-top: 8px;
+    }
+
+    .input-product {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        background: white;
+    }
+
+    .input-qty,
+    .input-unit {
+        width: 60px;
+        padding: 10px 8px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        background: white;
+        text-align: center;
+    }
+
+    .input-full {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        background: white;
+        margin-top: 8px;
+    }
+
+    .bundle-form .input-prefix {
+        position: relative;
+        width: 80px;
+    }
+
+    .bundle-form .input-prefix span {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        font-size: 0.875rem;
+    }
+
+    .bundle-form .input-prefix input {
+        width: 100%;
+        padding: 10px 12px 10px 24px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        background: white;
+    }
+
+    .remove-btn {
+        width: 32px;
+        height: 32px;
+        background: #fee2e2;
+        color: #dc2626;
+        border: none;
+        border-radius: 10px;
+        font-size: 1.25rem;
+        font-weight: bold;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .add-item-btn {
+        width: 100%;
+        padding: 14px;
+        background: #eff6ff;
+        color: #0d6efd;
+        border: 2px dashed #93c5fd;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 12px;
+    }
+
+    .form-total {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 0;
+        margin-top: 16px;
+        border-top: 2px solid #e5e7eb;
+    }
+
+    .form-total span:first-child {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .total-amount {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #16a34a;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .btn-cancel {
+        flex: 1;
+        padding: 14px;
+        background: #f3f4f6;
+        color: #6b7280;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-save {
+        flex: 2;
+        padding: 14px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-save:disabled {
+        opacity: 0.7;
+    }
+
+    .btn-loader {
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    /* Bundles List */
+    .bundles-list {
+        padding: 16px;
+    }
+
+    .bundle-card {
+        background: white;
+        border-radius: 18px;
+        padding: 18px;
+        margin-bottom: 14px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+
+    .bundle-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 14px;
+    }
+
+    .bundle-info h3 {
+        font-size: 1.0625rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 4px;
+    }
+
+    .bundle-desc {
+        font-size: 0.8125rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .bundle-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .action-btn {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .action-btn.edit {
+        background: #eff6ff;
+        color: #0d6efd;
+    }
+
+    .action-btn.delete {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .bundle-stats {
+        display: flex;
+        gap: 20px;
+        padding: 12px 0;
+        border-top: 1px solid #f3f4f6;
+        border-bottom: 1px solid #f3f4f6;
+        margin-bottom: 12px;
+    }
+
+    .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .stat-value {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .stat-label {
+        font-size: 0.6875rem;
+        color: #9ca3af;
+        text-transform: uppercase;
+    }
+
+    .bundle-items {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 10px;
+    }
+
+    .mini-item {
+        display: flex;
+        align-items: center;
+        padding: 6px 0;
+        font-size: 0.8125rem;
+    }
+
+    .mini-item .item-name {
+        flex: 1;
+        color: #374151;
+    }
+
+    .mini-item .item-qty {
+        color: #6b7280;
+        margin-right: 12px;
+    }
+
+    .mini-item .item-price {
+        font-weight: 600;
+        color: #16a34a;
+    }
+
+    .more-items {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        text-align: center;
+        padding-top: 6px;
+    }
+</style>
+
+@code {
+    private Toast? toast;
+    private List<MaterialBundleDto> bundles = new();
+    private bool isLoading = true;
+    private bool showForm = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+    private string formError = "";
+
+    // Form state
+    private Guid? editingBundleId;
+    private string formName = "";
+    private string formDescription = "";
+    private List<FormItem> formItems = new();
+
+    private class FormItem
+    {
+        public Guid? Id { get; set; }
+        public string ProductName { get; set; } = "";
+        public string? SupplierName { get; set; }
+        public string? ProductUrl { get; set; }
+        public decimal Quantity { get; set; } = 1;
+        public string? Unit { get; set; }
+        public decimal UnitPrice { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        if (!Auth.IsAuthenticated || !Auth.IsTradie)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        await LoadBundles();
+    }
+
+    private async Task LoadBundles()
+    {
+        isLoading = true;
+        try
+        {
+            bundles = await Api.GetMaterialBundlesAsync(includeInactive: true);
+        }
+        catch
+        {
+            bundles = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void StartCreateBundle()
+    {
+        editingBundleId = null;
+        formName = "";
+        formDescription = "";
+        formItems = new List<FormItem> { new FormItem() };
+        formError = "";
+        isEditing = false;
+        showForm = true;
+    }
+
+    private void StartEditBundle(MaterialBundleDto bundle)
+    {
+        editingBundleId = bundle.Id;
+        formName = bundle.Name;
+        formDescription = bundle.Description ?? "";
+        formItems = bundle.Items.Select(i => new FormItem
+        {
+            Id = i.Id,
+            ProductName = i.ProductName,
+            SupplierName = i.SupplierName,
+            ProductUrl = i.ProductUrl,
+            Quantity = i.DefaultQuantity,
+            Unit = i.Unit,
+            UnitPrice = i.EstimatedUnitPrice
+        }).ToList();
+
+        if (!formItems.Any())
+        {
+            formItems.Add(new FormItem());
+        }
+
+        formError = "";
+        isEditing = true;
+        showForm = true;
+    }
+
+    private void CancelForm()
+    {
+        showForm = false;
+        formError = "";
+    }
+
+    private void AddItem()
+    {
+        formItems.Add(new FormItem());
+    }
+
+    private void RemoveItem(int index)
+    {
+        if (index >= 0 && index < formItems.Count && formItems.Count > 1)
+        {
+            formItems.RemoveAt(index);
+        }
+    }
+
+    private decimal CalculateTotal()
+    {
+        return formItems.Sum(i => i.Quantity * i.UnitPrice);
+    }
+
+    private async Task SaveBundle()
+    {
+        formError = "";
+
+        if (string.IsNullOrWhiteSpace(formName))
+        {
+            formError = "Please enter a bundle name";
+            return;
+        }
+
+        var validItems = formItems.Where(i => !string.IsNullOrWhiteSpace(i.ProductName)).ToList();
+        if (!validItems.Any())
+        {
+            formError = "Please add at least one material item";
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            if (isEditing && editingBundleId.HasValue)
+            {
+                var request = new UpdateMaterialBundleRequest(
+                    formName,
+                    string.IsNullOrWhiteSpace(formDescription) ? null : formDescription,
+                    null,
+                    true,
+                    validItems.Select(i => new UpdateMaterialBundleItemRequest(
+                        i.Id,
+                        i.ProductName,
+                        i.SupplierName,
+                        i.ProductUrl,
+                        i.Quantity,
+                        i.Unit,
+                        i.UnitPrice
+                    )).ToList()
+                );
+
+                var success = await Api.UpdateMaterialBundleAsync(editingBundleId.Value, request);
+                if (success)
+                {
+                    toast?.ShowSuccess("Bundle updated successfully");
+                    showForm = false;
+                    await LoadBundles();
+                }
+                else
+                {
+                    formError = "Failed to update bundle. Please try again.";
+                }
+            }
+            else
+            {
+                var request = new CreateMaterialBundleRequest(
+                    formName,
+                    string.IsNullOrWhiteSpace(formDescription) ? null : formDescription,
+                    null,
+                    validItems.Select(i => new CreateMaterialBundleItemRequest(
+                        i.ProductName,
+                        i.SupplierName,
+                        i.ProductUrl,
+                        i.Quantity,
+                        i.Unit,
+                        i.UnitPrice
+                    )).ToList()
+                );
+
+                var result = await Api.CreateMaterialBundleAsync(request);
+                if (result != null)
+                {
+                    toast?.ShowSuccess("Bundle created successfully");
+                    showForm = false;
+                    await LoadBundles();
+                }
+                else
+                {
+                    formError = "Failed to create bundle. Please try again.";
+                }
+            }
+        }
+        catch
+        {
+            formError = "Connection error. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteBundle(MaterialBundleDto bundle)
+    {
+        var success = await Api.DeleteMaterialBundleAsync(bundle.Id);
+        if (success)
+        {
+            toast?.ShowSuccess("Bundle deleted");
+            bundles.Remove(bundle);
+        }
+        else
+        {
+            toast?.ShowError("Failed to delete bundle");
+        }
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/profile");
+}

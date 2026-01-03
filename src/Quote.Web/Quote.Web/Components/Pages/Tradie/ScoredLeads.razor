@@ -1,0 +1,365 @@
+@page "/tradie/leads"
+@using Quote.Shared.DTOs
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Smart Leads - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="bi bi-bullseye me-2 text-primary"></i>Smart Leads
+            </h1>
+            <p class="text-muted mb-0">Jobs scored and ranked for your profile</p>
+        </div>
+        <button class="btn btn-outline-primary" @onclick="RefreshScores" disabled="@isRefreshing">
+            @if (isRefreshing)
+            {
+                <span class="spinner-border spinner-border-sm me-1"></span>
+            }
+            else
+            {
+                <i class="bi bi-arrow-clockwise me-1"></i>
+            }
+            Refresh Scores
+        </button>
+    </div>
+
+    @if (stats != null)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100 border-start border-success border-4">
+                    <div class="card-body text-center">
+                        <h3 class="text-success mb-0">@stats.ExcellentLeads</h3>
+                        <small class="text-muted">Excellent Matches</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100 border-start border-primary border-4">
+                    <div class="card-body text-center">
+                        <h3 class="text-primary mb-0">@stats.GoodLeads</h3>
+                        <small class="text-muted">Good Matches</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100 border-start border-warning border-4">
+                    <div class="card-body text-center">
+                        <h3 class="text-warning mb-0">@stats.FairLeads</h3>
+                        <small class="text-muted">Fair Matches</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h3 class="text-info mb-0">@stats.AverageScore.ToString("F0")</h3>
+                        <small class="text-muted">Avg Score</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <ul class="nav nav-pills mb-4">
+        <li class="nav-item">
+            <button class="nav-link @(ratingFilter == null ? "active" : "")" @onclick="() => FilterByRating(null)">
+                All <span class="badge bg-secondary ms-1">@totalCount</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(ratingFilter == "Excellent" ? "active" : "")" @onclick='() => FilterByRating("Excellent")'>
+                <i class="bi bi-star-fill text-warning me-1"></i>Excellent
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(ratingFilter == "Good" ? "active" : "")" @onclick='() => FilterByRating("Good")'>
+                <i class="bi bi-star-half text-warning me-1"></i>Good
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(ratingFilter == "Fair" ? "active" : "")" @onclick='() => FilterByRating("Fair")'>
+                Fair
+            </button>
+        </li>
+    </ul>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+            <p class="text-muted mt-2">Calculating your best leads...</p>
+        </div>
+    }
+    else if (!leads.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-search fs-1 text-muted"></i>
+            <h5 class="mt-3">No leads found</h5>
+            <p class="text-muted">We couldn't find any matching jobs in your service area.</p>
+            <p class="text-muted">Try expanding your service radius or updating your preferences.</p>
+            <a href="/tradie/settings" class="btn btn-primary">Update Preferences</a>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var lead in leads)
+            {
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm hover-shadow">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-1 text-center d-none d-md-block">
+                                    <div class="score-circle @GetScoreClass(lead.ScoreRating)">
+                                        <span class="score-value">@lead.TotalScore</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="badge @GetRatingBadgeClass(lead.ScoreRating) me-2">
+                                            @lead.ScoreRating
+                                        </span>
+                                        <span class="d-md-none me-2">
+                                            <strong>@lead.TotalScore</strong>/100
+                                        </span>
+                                        <span class="text-muted small">@lead.TradeCategory</span>
+                                    </div>
+                                    <h5 class="mb-1">
+                                        <a href="/jobs/@lead.JobId" class="text-decoration-none text-dark">
+                                            @lead.Title
+                                        </a>
+                                    </h5>
+                                    <p class="text-muted mb-2 small">
+                                        <i class="bi bi-geo-alt me-1"></i>@lead.SuburbName, @lead.State
+                                        <span class="ms-2"><i class="bi bi-pin-map me-1"></i>@lead.DistanceKm.ToString("F1") km</span>
+                                    </p>
+                                    @if (lead.CustomerQuality != null)
+                                    {
+                                        <span class="badge @GetCustomerBadgeClass(lead.CustomerQuality.QualityRating) small">
+                                            <i class="bi bi-person-check me-1"></i>@lead.CustomerQuality.QualityRating Customer
+                                        </span>
+                                    }
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-2">
+                                        @if (lead.BudgetMax.HasValue)
+                                        {
+                                            <span class="h5 text-primary mb-0">
+                                                $@(lead.BudgetMin?.ToString("N0") ?? "0") - $@lead.BudgetMax.Value.ToString("N0")
+                                            </span>
+                                        }
+                                        else if (lead.BudgetMin.HasValue)
+                                        {
+                                            <span class="h5 text-primary mb-0">From $@lead.BudgetMin.Value.ToString("N0")</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">Budget not specified</span>
+                                        }
+                                    </div>
+                                    @if (lead.PreferredStartDate.HasValue)
+                                    {
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar me-1"></i>@lead.PreferredStartDate.Value.ToString("MMM dd")
+                                        </small>
+                                    }
+                                    else if (lead.IsFlexibleDates)
+                                    {
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar-check me-1"></i>Flexible dates
+                                        </small>
+                                    }
+                                </div>
+                                <div class="col-md-3 text-end">
+                                    <div class="mb-2 d-flex gap-1 justify-content-end flex-wrap">
+                                        <span class="badge bg-light text-dark border" title="Distance Score">
+                                            <i class="bi bi-geo-alt"></i> @lead.DistanceScore/25
+                                        </span>
+                                        <span class="badge bg-light text-dark border" title="Budget Match">
+                                            <i class="bi bi-currency-dollar"></i> @lead.BudgetMatchScore/25
+                                        </span>
+                                        <span class="badge bg-light text-dark border" title="Skill Match">
+                                            <i class="bi bi-tools"></i> @lead.SkillMatchScore/25
+                                        </span>
+                                        <span class="badge bg-light text-dark border" title="Customer Quality">
+                                            <i class="bi bi-person"></i> @lead.CustomerQualityScore/15
+                                        </span>
+                                        <span class="badge bg-light text-dark border" title="Urgency">
+                                            <i class="bi bi-clock"></i> @lead.UrgencyScore/10
+                                        </span>
+                                    </div>
+                                    <div class="mt-2">
+                                        <a href="/tradie/quote/@lead.JobId" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-send me-1"></i>Quote Now
+                                        </a>
+                                        <a href="/jobs/@lead.JobId" class="btn btn-outline-secondary btn-sm ms-1">
+                                            <i class="bi bi-eye me-1"></i>View
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (totalCount > pageSize)
+        {
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="PreviousPage">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= totalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(currentPage == pageNum ? "active" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="NextPage">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+</div>
+
+<style>
+    .score-circle {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 1.2rem;
+    }
+    .score-circle.excellent { background: linear-gradient(135deg, #28a745, #20c997); color: white; }
+    .score-circle.good { background: linear-gradient(135deg, #007bff, #6610f2); color: white; }
+    .score-circle.fair { background: linear-gradient(135deg, #ffc107, #fd7e14); color: white; }
+    .score-circle.low { background: #6c757d; color: white; }
+
+    .hover-shadow:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+        transition: box-shadow 0.2s;
+    }
+</style>
+
+@code {
+    private List<ScoredLeadDto> leads = new();
+    private LeadScoringStats? stats;
+    private string? ratingFilter;
+    private bool isLoading = true;
+    private bool isRefreshing = false;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalCount = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalCount / pageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLeads();
+    }
+
+    private async Task LoadLeads()
+    {
+        try
+        {
+            var url = $"api/leads/scored?page={currentPage}&pageSize={pageSize}";
+            if (!string.IsNullOrEmpty(ratingFilter))
+            {
+                url += $"&rating={ratingFilter}";
+            }
+
+            var response = await Http.GetFromJsonAsync<ScoredLeadsResponse>(url);
+            if (response != null)
+            {
+                leads = response.Leads;
+                stats = response.Stats;
+                totalCount = response.TotalCount;
+            }
+        }
+        catch
+        {
+            leads = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshScores()
+    {
+        isRefreshing = true;
+        StateHasChanged();
+
+        try
+        {
+            await Http.PostAsync("api/leads/recalculate", null);
+            await LoadLeads();
+        }
+        finally
+        {
+            isRefreshing = false;
+        }
+    }
+
+    private async Task FilterByRating(string? rating)
+    {
+        ratingFilter = rating;
+        currentPage = 1;
+        isLoading = true;
+        await LoadLeads();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        currentPage = page;
+        isLoading = true;
+        await LoadLeads();
+    }
+
+    private async Task PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            await GoToPage(currentPage - 1);
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            await GoToPage(currentPage + 1);
+        }
+    }
+
+    private string GetScoreClass(string rating) => rating.ToLower();
+
+    private string GetRatingBadgeClass(string rating) => rating switch
+    {
+        "Excellent" => "bg-success",
+        "Good" => "bg-primary",
+        "Fair" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    private string GetCustomerBadgeClass(string? rating) => rating switch
+    {
+        "Excellent" => "bg-success-subtle text-success",
+        "Good" => "bg-primary-subtle text-primary",
+        "Fair" => "bg-warning-subtle text-warning",
+        "New" => "bg-info-subtle text-info",
+        _ => "bg-secondary-subtle text-secondary"
+    };
+}

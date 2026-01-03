@@ -1,0 +1,213 @@
+@page "/jobs"
+@inject JobService JobService
+@inject AuthStateService AuthState
+@inject NavigationManager Navigation
+
+<PageTitle>Jobs - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-4">
+        <div>
+            <p class="text-uppercase text-muted fw-semibold mb-1 small">Open opportunities</p>
+            <h2 class="mb-0">Available Jobs</h2>
+        </div>
+        @if (AuthState.IsAuthenticated && AuthState.IsCustomer)
+        {
+            <a href="/jobs/create" class="btn btn-primary">Post a Job</a>
+        }
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="filter-card">
+                <label class="form-label fw-semibold mb-2">Filter by Trade</label>
+                <select class="form-select" @onchange="OnCategoryChanged">
+                    <option value="">All Trades</option>
+                    @foreach (var cat in categories)
+                    {
+                        <option value="@cat.Id" selected="@(selectedCategory == cat.Id)">@cat.Icon @cat.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (jobs == null || !jobs.Any())
+    {
+        <div class="alert alert-info">
+            <p class="mb-0">No jobs found. @(AuthState.IsCustomer ? "Be the first to post a job!" : "Check back later for new opportunities.")</p>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            @foreach (var job in jobs)
+            {
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100 job-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary">@job.TradeCategoryIcon @job.TradeCategoryName</span>
+                                <span class="badge @GetStatusBadgeClass(job.Status)">@job.Status</span>
+                            </div>
+                            <h5 class="card-title">@job.Title</h5>
+                            <p class="card-text text-muted small line-clamp-2">@TruncateDescription(job.Description)</p>
+
+                            <div class="mb-2">
+                                <small class="text-muted">
+                                    <i class="bi bi-geo-alt"></i> @job.SuburbName, @job.State @job.Postcode
+                                </small>
+                            </div>
+
+                            @if (job.BudgetMin.HasValue || job.BudgetMax.HasValue)
+                            {
+                                <div class="mb-2">
+                                    <strong>Budget:</strong>
+                                    @if (job.BudgetMin.HasValue && job.BudgetMax.HasValue)
+                                    {
+                                        <span>$@job.BudgetMin.Value.ToString("N0") - $@job.BudgetMax.Value.ToString("N0")</span>
+                                    }
+                                    else if (job.BudgetMax.HasValue)
+                                    {
+                                        <span>Up to $@job.BudgetMax.Value.ToString("N0")</span>
+                                    }
+                                </div>
+                            }
+
+                            @if (job.PreferredStartDate.HasValue)
+                            {
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        Start: @job.PreferredStartDate.Value.ToString("d MMM yyyy")
+                                        @if (job.IsFlexibleDates)
+                                        {
+                                            <span class="badge bg-secondary">Flexible</span>
+                                        }
+                                    </small>
+                                </div>
+                            }
+                        </div>
+                        <div class="card-footer bg-white border-top-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">@job.QuoteCount quotes</small>
+                                <div class="btn-group">
+                                    <a href="/jobs/@job.Id" class="btn btn-outline-primary btn-sm">View</a>
+                                    @if (AuthState.IsAuthenticated && AuthState.IsTradie)
+                                    {
+                                        <a href="/tradie/quote/@job.Id" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-lightning-fill"></i> Quote
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (totalPages > 1)
+        {
+            <nav class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPage(currentPage - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= totalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(currentPage == pageNum ? "active" : "")">
+                            <button class="page-link" @onclick="() => LoadPage(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPage(currentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+</div>
+
+@code {
+    private List<JobDto> jobs = new();
+    private List<TradeCategoryDto> categories = new();
+    private Guid? selectedCategory;
+    private bool isLoading = true;
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private const int PageSize = 9;
+
+    [SupplyParameterFromQuery]
+    public string? Category { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        categories = await JobService.GetTradeCategoriesAsync();
+
+        if (Guid.TryParse(Category, out var catId))
+        {
+            selectedCategory = catId;
+        }
+
+        await LoadJobs();
+    }
+
+    private async Task LoadJobs()
+    {
+        isLoading = true;
+        var response = await JobService.GetJobsAsync(currentPage, PageSize, selectedCategory);
+        if (response != null)
+        {
+            jobs = response.Jobs;
+            totalPages = (int)Math.Ceiling((double)response.TotalCount / PageSize);
+        }
+        isLoading = false;
+    }
+
+    private async Task OnCategoryChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var catId))
+        {
+            selectedCategory = catId;
+        }
+        else
+        {
+            selectedCategory = null;
+        }
+        currentPage = 1;
+        await LoadJobs();
+    }
+
+    private async Task LoadPage(int page)
+    {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        await LoadJobs();
+    }
+
+    private string TruncateDescription(string description)
+    {
+        if (string.IsNullOrEmpty(description)) return "";
+        return description.Length > 100 ? description.Substring(0, 100) + "..." : description;
+    }
+
+    private string GetStatusBadgeClass(string status) => status switch
+    {
+        "Open" => "bg-success",
+        "Quoted" => "bg-info",
+        "Accepted" => "bg-warning text-dark",
+        "InProgress" => "bg-primary",
+        "Completed" => "bg-secondary",
+        _ => "bg-secondary"
+    };
+}

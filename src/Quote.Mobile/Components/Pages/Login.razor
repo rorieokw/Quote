@@ -1,0 +1,299 @@
+@page "/login"
+@inject ApiService Api
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<div class="login-page">
+    <div class="login-header">
+        <div class="logo-box">
+            <span>Q</span>
+        </div>
+        <h1>Welcome back</h1>
+        <p>Sign in to continue</p>
+    </div>
+
+    <div class="login-form">
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="error-box">
+                <span class="error-icon">!</span>
+                <span>@errorMessage</span>
+            </div>
+        }
+
+        <div class="input-group">
+            <label>Email</label>
+            <input type="email" @bind="email" placeholder="you@example.com" />
+        </div>
+
+        <div class="input-group">
+            <label>Password</label>
+            <input type="password" @bind="password" placeholder="Enter your password" />
+        </div>
+
+        <button class="btn-login" @onclick="HandleLogin" disabled="@isLoading">
+            @if (isLoading)
+            {
+                <div class="btn-loader"></div>
+            }
+            else
+            {
+                <span>Sign In</span>
+            }
+        </button>
+
+        <div class="divider">
+            <span>or</span>
+        </div>
+
+        <button class="btn-create" @onclick="GoToRegister">
+            Create Account
+        </button>
+    </div>
+</div>
+
+<style>
+    .login-page {
+        min-height: 100vh;
+        background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+        padding: 32px 20px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .login-header {
+        text-align: center;
+        padding: 24px 0 32px;
+    }
+
+    .logo-box {
+        width: 64px;
+        height: 64px;
+        background: #0d6efd;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        box-shadow: 0 12px 32px rgba(13, 110, 253, 0.3);
+    }
+
+    .logo-box span {
+        font-size: 2rem;
+        font-weight: 800;
+        color: white;
+    }
+
+    .login-header h1 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #1f2937;
+        margin: 0 0 8px;
+    }
+
+    .login-header p {
+        font-size: 0.9375rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .login-form {
+        background: white;
+        border-radius: 24px;
+        padding: 28px 24px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+    }
+
+    .error-box {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.875rem;
+        color: #dc2626;
+        font-weight: 500;
+    }
+
+    .error-icon {
+        width: 22px;
+        height: 22px;
+        background: #dc2626;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .input-group {
+        margin-bottom: 20px;
+    }
+
+    .input-group label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+    }
+
+    .input-group input {
+        width: 100%;
+        padding: 16px 18px;
+        border: 2px solid #e5e7eb;
+        border-radius: 14px;
+        font-size: 1rem;
+        background: #f9fafb;
+        color: #1f2937;
+        box-sizing: border-box;
+        transition: all 0.2s;
+    }
+
+    .input-group input:focus {
+        outline: none;
+        border-color: #0d6efd;
+        background: white;
+        box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1);
+    }
+
+    .input-group input::placeholder {
+        color: #9ca3af;
+    }
+
+    .btn-login {
+        width: 100%;
+        padding: 18px;
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+        transition: all 0.2s;
+    }
+
+    .btn-login:active {
+        transform: scale(0.98);
+    }
+
+    .btn-login:disabled {
+        opacity: 0.7;
+    }
+
+    .btn-loader {
+        width: 22px;
+        height: 22px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .divider {
+        text-align: center;
+        margin: 24px 0;
+        position: relative;
+        color: #9ca3af;
+        font-size: 0.8125rem;
+    }
+
+    .divider::before,
+    .divider::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        width: 40%;
+        height: 1px;
+        background: #e5e7eb;
+    }
+
+    .divider::before { left: 0; }
+    .divider::after { right: 0; }
+
+    .btn-create {
+        width: 100%;
+        padding: 16px;
+        background: white;
+        color: #374151;
+        border: 2px solid #e5e7eb;
+        border-radius: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-create:active {
+        background: #f9fafb;
+        border-color: #d1d5db;
+    }
+</style>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string errorMessage = "";
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        if (Auth.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Please enter email and password";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = "";
+
+        try
+        {
+            var result = await Api.LoginAsync(email, password);
+            if (result != null)
+            {
+                await Auth.SaveAuthAsync(result);
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                errorMessage = "Invalid email or password";
+            }
+        }
+        catch (Exception)
+        {
+            errorMessage = "Connection failed. Check your internet.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void GoToRegister()
+    {
+        Navigation.NavigateTo("/register");
+    }
+}

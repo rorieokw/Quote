@@ -1,0 +1,209 @@
+@page "/profile"
+@inject AuthStateService AuthState
+@inject NavigationManager Navigation
+
+
+<PageTitle>My Profile - Quote</PageTitle>
+
+<div class="container py-4">
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (!isAuthenticated)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Please <a href="/login">sign in</a> to view your profile.
+        </div>
+    }
+    else
+    {
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 80px; height: 80px;">
+                        <span class="text-white fs-1 fw-bold">@firstInitial</span>
+                    </div>
+                    <div>
+                        <h1 class="h3 mb-0">@firstName @lastName</h1>
+                        <span class="badge bg-primary fs-6">@userType</span>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><i class="bi bi-person me-2"></i>Account Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-sm-4 text-muted">Email</div>
+                            <div class="col-sm-8 fw-semibold">@email</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-4 text-muted">Full Name</div>
+                            <div class="col-sm-8 fw-semibold">@firstName @lastName</div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-4 text-muted">Account Type</div>
+                            <div class="col-sm-8">
+                                <span class="badge bg-primary">@userType</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (userType == "Tradie")
+                {
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-white">
+                            <h5 class="mb-0"><i class="bi bi-tools me-2"></i>Tradie Tools</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <a href="/tradie/quotes" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-file-text fs-1 text-primary mb-2 d-block"></i>
+                                            <h6 class="mb-1">My Quotes</h6>
+                                            <small class="text-muted">View submitted quotes</small>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/tradie/templates" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-lightning fs-1 text-warning mb-2 d-block"></i>
+                                            <h6 class="mb-1">Quote Templates</h6>
+                                            <small class="text-muted">Manage quick templates</small>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/tradie/map" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-map fs-1 text-success mb-2 d-block"></i>
+                                            <h6 class="mb-1">Job Map</h6>
+                                            <small class="text-muted">Find jobs near you</small>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/jobs" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-briefcase fs-1 text-info mb-2 d-block"></i>
+                                            <h6 class="mb-1">Browse Jobs</h6>
+                                            <small class="text-muted">Find new opportunities</small>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/tradie/portfolio" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-images fs-1 text-purple mb-2 d-block"></i>
+                                            <h6 class="mb-1">Portfolio</h6>
+                                            <small class="text-muted">Showcase your work</small>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/tradie/team" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-people fs-1 text-secondary mb-2 d-block"></i>
+                                            <h6 class="mb-1">Team</h6>
+                                            <small class="text-muted">Manage your crew</small>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/tradie/settings" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-gear fs-1 text-dark mb-2 d-block"></i>
+                                            <h6 class="mb-1">Settings</h6>
+                                            <small class="text-muted">Preferences & availability</small>
+                                        </div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (userType == "Customer")
+                {
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-white">
+                            <h5 class="mb-0"><i class="bi bi-house me-2"></i>Customer Tools</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <a href="/jobs/create" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-plus-circle fs-1 text-primary mb-2 d-block"></i>
+                                            <h6 class="mb-1">Post a Job</h6>
+                                            <small class="text-muted">Get quotes from tradies</small>
+                                        </div>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/my-jobs" class="card h-100 text-decoration-none border hover-shadow">
+                                        <div class="card-body text-center py-4">
+                                            <i class="bi bi-list-check fs-1 text-success mb-2 d-block"></i>
+                                            <h6 class="mb-1">My Jobs</h6>
+                                            <small class="text-muted">Manage your posted jobs</small>
+                                        </div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .hover-shadow:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+        transform: translateY(-2px);
+        transition: all 0.2s ease;
+    }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private bool isAuthenticated = false;
+    private string firstName = "";
+    private string lastName = "";
+    private string email = "";
+    private string userType = "";
+    private string firstInitial = "U";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await AuthState.InitializeAsync();
+
+            isAuthenticated = AuthState.IsAuthenticated;
+
+            if (AuthState.CurrentUser != null)
+            {
+                firstName = AuthState.CurrentUser.FirstName ?? "";
+                lastName = AuthState.CurrentUser.LastName ?? "";
+                email = AuthState.CurrentUser.Email ?? "";
+                userType = AuthState.CurrentUser.UserType ?? "";
+                firstInitial = !string.IsNullOrEmpty(firstName) ? firstName.Substring(0, 1).ToUpper() : "U";
+            }
+
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

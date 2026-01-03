@@ -1,0 +1,412 @@
+@page "/tradie/material-bundles"
+@using Quote.Shared.DTOs
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+<PageTitle>Material Bundles - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Material Bundles</h1>
+            <p class="text-muted mb-0">Save time with reusable material collections</p>
+        </div>
+        <button class="btn btn-primary" @onclick="ShowCreateModal">
+            <i class="bi bi-plus-lg me-2"></i>New Bundle
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (!bundles.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-box fs-1 text-muted"></i>
+            <h5 class="mt-3">No bundles yet</h5>
+            <p class="text-muted">Create material bundles for your common jobs to quote faster!</p>
+            <button class="btn btn-primary" @onclick="ShowCreateModal">Create Your First Bundle</button>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var bundle in bundles)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="card-title mb-0">@bundle.Name</h5>
+                                @if (!bundle.IsActive)
+                                {
+                                    <span class="badge bg-secondary">Inactive</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrEmpty(bundle.Description))
+                            {
+                                <p class="text-muted small mb-3">@bundle.Description</p>
+                            }
+                            <div class="row text-center mb-3">
+                                <div class="col-4">
+                                    <h6 class="text-primary mb-0">@bundle.ItemCount</h6>
+                                    <small class="text-muted">Items</small>
+                                </div>
+                                <div class="col-4">
+                                    <h6 class="text-success mb-0">$@bundle.TotalCost.ToString("N0")</h6>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                                <div class="col-4">
+                                    <h6 class="mb-0">@bundle.UsageCount</h6>
+                                    <small class="text-muted">Used</small>
+                                </div>
+                            </div>
+                            @if (bundle.Items.Any())
+                            {
+                                <div class="mb-3">
+                                    <small class="text-muted">Materials:</small>
+                                    <ul class="list-unstyled mb-0 small">
+                                        @foreach (var item in bundle.Items.Take(3))
+                                        {
+                                            <li class="d-flex justify-content-between">
+                                                <span>@item.ProductName (@item.DefaultQuantity @item.Unit)</span>
+                                                <span class="text-success">$@item.TotalPrice.ToString("N2")</span>
+                                            </li>
+                                        }
+                                        @if (bundle.Items.Count > 3)
+                                        {
+                                            <li class="text-muted">+ @(bundle.Items.Count - 3) more items</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0">
+                            <div class="d-flex justify-content-end gap-2">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => EditBundle(bundle)">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteBundle(bundle.Id)">
+                                    <i class="bi bi-trash me-1"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Create/Edit Modal -->
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(isEditing ? "Edit Bundle" : "New Bundle")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Bundle Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" @bind="formModel.Name" placeholder="e.g., Bathroom Renovation Kit" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" @bind="formModel.Description" rows="2" placeholder="Optional description..."></textarea>
+                    </div>
+
+                    <h6 class="mb-3">Materials</h6>
+
+                    @foreach (var (item, index) in formItems.Select((m, i) => (m, i)))
+                    {
+                        <div class="card mb-3 bg-light">
+                            <div class="card-body py-3">
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-5">
+                                        <label class="form-label small">Product Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control form-control-sm" @bind="item.ProductName" placeholder="Product name" />
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">Quantity</label>
+                                        <input type="number" class="form-control form-control-sm" @bind="item.Quantity" step="0.01" />
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">Unit</label>
+                                        <input type="text" class="form-control form-control-sm" @bind="item.Unit" placeholder="ea, m, kg" />
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">Unit Price</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">$</span>
+                                            <input type="number" class="form-control" @bind="item.UnitPrice" step="0.01" />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-1">
+                                        <button type="button" class="btn btn-sm btn-outline-danger w-100" @onclick="() => RemoveItem(index)" disabled="@(formItems.Count <= 1)">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mt-2">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control form-control-sm" @bind="item.SupplierName" placeholder="Supplier (optional)" />
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <span class="text-success fw-bold">Subtotal: $@((item.Quantity * item.UnitPrice).ToString("N2"))</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <button type="button" class="btn btn-outline-primary w-100 mb-3" @onclick="AddItem">
+                        <i class="bi bi-plus-lg me-2"></i>Add Material
+                    </button>
+
+                    <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded">
+                        <span class="fw-semibold">Bundle Total:</span>
+                        <span class="h5 mb-0 text-success">$@CalculateTotal().ToString("N2")</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveBundle" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        @(isEditing ? "Save Changes" : "Create Bundle")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<MaterialBundleDto> bundles = new();
+    private bool isLoading = true;
+    private bool showModal = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+    private string errorMessage = "";
+    private Guid? editingBundleId;
+
+    private BundleFormModel formModel = new();
+    private List<ItemFormModel> formItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBundles();
+    }
+
+    private async Task LoadBundles()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<MaterialBundleListResponse>("api/material-bundles?includeInactive=true");
+            bundles = response?.Bundles ?? new();
+        }
+        catch
+        {
+            bundles = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ShowCreateModal()
+    {
+        formModel = new BundleFormModel();
+        formItems = new List<ItemFormModel> { new ItemFormModel() };
+        editingBundleId = null;
+        isEditing = false;
+        errorMessage = "";
+        showModal = true;
+    }
+
+    private void EditBundle(MaterialBundleDto bundle)
+    {
+        formModel = new BundleFormModel
+        {
+            Name = bundle.Name,
+            Description = bundle.Description ?? ""
+        };
+        formItems = bundle.Items.Select(i => new ItemFormModel
+        {
+            Id = i.Id,
+            ProductName = i.ProductName,
+            SupplierName = i.SupplierName ?? "",
+            ProductUrl = i.ProductUrl ?? "",
+            Quantity = i.DefaultQuantity,
+            Unit = i.Unit ?? "",
+            UnitPrice = i.EstimatedUnitPrice
+        }).ToList();
+
+        if (!formItems.Any())
+        {
+            formItems.Add(new ItemFormModel());
+        }
+
+        editingBundleId = bundle.Id;
+        isEditing = true;
+        errorMessage = "";
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        errorMessage = "";
+    }
+
+    private void AddItem()
+    {
+        formItems.Add(new ItemFormModel());
+    }
+
+    private void RemoveItem(int index)
+    {
+        if (index >= 0 && index < formItems.Count && formItems.Count > 1)
+        {
+            formItems.RemoveAt(index);
+        }
+    }
+
+    private decimal CalculateTotal()
+    {
+        return formItems.Sum(i => i.Quantity * i.UnitPrice);
+    }
+
+    private async Task SaveBundle()
+    {
+        errorMessage = "";
+
+        if (string.IsNullOrWhiteSpace(formModel.Name))
+        {
+            errorMessage = "Please enter a bundle name";
+            return;
+        }
+
+        var validItems = formItems.Where(i => !string.IsNullOrWhiteSpace(i.ProductName)).ToList();
+        if (!validItems.Any())
+        {
+            errorMessage = "Please add at least one material";
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            HttpResponseMessage response;
+
+            if (isEditing && editingBundleId.HasValue)
+            {
+                var request = new UpdateMaterialBundleRequest(
+                    formModel.Name,
+                    string.IsNullOrWhiteSpace(formModel.Description) ? null : formModel.Description,
+                    null,
+                    true,
+                    validItems.Select(i => new UpdateMaterialBundleItemRequest(
+                        i.Id,
+                        i.ProductName,
+                        string.IsNullOrWhiteSpace(i.SupplierName) ? null : i.SupplierName,
+                        string.IsNullOrWhiteSpace(i.ProductUrl) ? null : i.ProductUrl,
+                        i.Quantity,
+                        string.IsNullOrWhiteSpace(i.Unit) ? null : i.Unit,
+                        i.UnitPrice
+                    )).ToList()
+                );
+
+                response = await Http.PutAsJsonAsync($"api/material-bundles/{editingBundleId}", request);
+            }
+            else
+            {
+                var request = new CreateMaterialBundleRequest(
+                    formModel.Name,
+                    string.IsNullOrWhiteSpace(formModel.Description) ? null : formModel.Description,
+                    null,
+                    validItems.Select(i => new CreateMaterialBundleItemRequest(
+                        i.ProductName,
+                        string.IsNullOrWhiteSpace(i.SupplierName) ? null : i.SupplierName,
+                        string.IsNullOrWhiteSpace(i.ProductUrl) ? null : i.ProductUrl,
+                        i.Quantity,
+                        string.IsNullOrWhiteSpace(i.Unit) ? null : i.Unit,
+                        i.UnitPrice
+                    )).ToList()
+                );
+
+                response = await Http.PostAsJsonAsync("api/material-bundles", request);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadBundles();
+                CloseModal();
+            }
+            else
+            {
+                errorMessage = "Failed to save bundle. Please try again.";
+            }
+        }
+        catch
+        {
+            errorMessage = "Connection error. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteBundle(Guid bundleId)
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"api/material-bundles/{bundleId}");
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadBundles();
+            }
+        }
+        catch
+        {
+            // Handle error silently
+        }
+    }
+
+    private class BundleFormModel
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+    }
+
+    private class ItemFormModel
+    {
+        public Guid? Id { get; set; }
+        public string ProductName { get; set; } = "";
+        public string SupplierName { get; set; } = "";
+        public string ProductUrl { get; set; } = "";
+        public decimal Quantity { get; set; } = 1;
+        public string Unit { get; set; } = "";
+        public decimal UnitPrice { get; set; } = 0;
+    }
+}

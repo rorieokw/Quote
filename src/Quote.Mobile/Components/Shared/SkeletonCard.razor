@@ -1,0 +1,116 @@
+@namespace Quote.Mobile.Components.Shared
+
+@if (Type == "job")
+{
+    <!-- Job Card Skeleton -->
+    <div class="skeleton-card">
+        <div class="skeleton-header">
+            <Skeleton Width="80px" Height="24px" Class="pill" />
+            <Skeleton Width="60px" Height="20px" Class="pill" />
+        </div>
+        <Skeleton Width="85%" Height="20px" />
+        <Skeleton Width="100%" Height="14px" />
+        <Skeleton Width="70%" Height="14px" />
+        <div class="skeleton-footer">
+            <Skeleton Width="120px" Height="14px" />
+            <Skeleton Width="80px" Height="32px" Class="rounded" />
+        </div>
+    </div>
+}
+else if (Type == "conversation")
+{
+    <!-- Conversation Card Skeleton -->
+    <div class="skeleton-card conversation">
+        <Skeleton Width="48px" Height="48px" Class="circle" />
+        <div class="skeleton-content">
+            <div class="skeleton-row">
+                <Skeleton Width="120px" Height="16px" />
+                <Skeleton Width="50px" Height="12px" />
+            </div>
+            <Skeleton Width="150px" Height="12px" />
+            <Skeleton Width="200px" Height="14px" />
+        </div>
+    </div>
+}
+else if (Type == "quote")
+{
+    <!-- Quote Card Skeleton -->
+    <div class="skeleton-card">
+        <div class="skeleton-header">
+            <Skeleton Width="70px" Height="24px" Class="pill" />
+            <Skeleton Width="80px" Height="28px" Class="rounded" />
+        </div>
+        <Skeleton Width="90%" Height="18px" />
+        <Skeleton Width="60%" Height="14px" />
+        <div class="skeleton-stats">
+            <Skeleton Width="80px" Height="40px" Class="rounded" />
+            <Skeleton Width="80px" Height="40px" Class="rounded" />
+            <Skeleton Width="80px" Height="40px" Class="rounded" />
+        </div>
+    </div>
+}
+else
+{
+    <!-- Generic Card Skeleton -->
+    <div class="skeleton-card">
+        <Skeleton Width="100%" Height="16px" />
+        <Skeleton Width="80%" Height="14px" />
+        <Skeleton Width="60%" Height="14px" />
+    </div>
+}
+
+<style>
+    .skeleton-card {
+        background: white;
+        border-radius: 20px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .skeleton-card.conversation {
+        flex-direction: row;
+        align-items: flex-start;
+        padding: 16px;
+        border-radius: 16px;
+    }
+
+    .skeleton-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .skeleton-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .skeleton-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .skeleton-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 4px;
+    }
+
+    .skeleton-stats {
+        display: flex;
+        gap: 12px;
+        margin-top: 4px;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string Type { get; set; } = "generic"; // job, conversation, quote, generic
+}

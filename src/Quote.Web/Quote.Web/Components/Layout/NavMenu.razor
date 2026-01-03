@@ -1,0 +1,209 @@
+@inject AuthStateService AuthState
+@inject AuthService AuthService
+@inject MessagesService MessagesService
+@inject SignalRService SignalR
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm py-3">
+    <div class="container d-flex align-items-center">
+        <a class="navbar-brand fw-bold d-flex align-items-center" href="">
+            <span class="text-primary">Quote</span>
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse align-items-center" id="navbarNav">
+            <ul class="navbar-nav nav-left flex-row align-items-center gap-3 mb-0">
+                <li class="nav-item">
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
+                </li>
+                <li class="nav-item">
+                    <NavLink class="nav-link" href="jobs">Browse Jobs</NavLink>
+                </li>
+                @if (AuthState.IsAuthenticated && AuthState.IsCustomer)
+                {
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="jobs/create">Post a Job</NavLink>
+                    </li>
+                }
+                @if (AuthState.IsAuthenticated)
+                {
+                    <li class="nav-item position-relative">
+                        <NavLink class="nav-link" href="messages">
+                            <i class="bi bi-chat-dots me-1"></i>Messages
+                            @if (unreadCount > 0)
+                            {
+                                <span class="badge bg-danger rounded-pill ms-1">@(unreadCount > 99 ? "99+" : unreadCount.ToString())</span>
+                            }
+                        </NavLink>
+                    </li>
+                }
+                @if (AuthState.IsAuthenticated && AuthState.IsTradie)
+                {
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="tradie/leads">
+                            <i class="bi bi-bullseye me-1"></i>Smart Leads
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="tradie/quotes">My Quotes</NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="tradie/map">Job Map</NavLink>
+                    </li>
+                }
+            </ul>
+
+            <ul class="navbar-nav nav-right flex-row align-items-center gap-3 mb-0 ms-auto">
+                @if (AuthState.IsAuthenticated)
+                {
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-dark fw-semibold" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle me-1"></i>
+                            @(AuthState.CurrentUser?.FirstName ?? "User") @(AuthState.CurrentUser?.LastName ?? "")
+                            <span class="badge bg-primary ms-1">@(AuthState.CurrentUser?.UserType ?? "User")</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li class="dropdown-header">Account</li>
+                            <li><a class="dropdown-item" href="profile"><i class="bi bi-person me-2"></i>My Profile</a></li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center" href="messages">
+                                    <i class="bi bi-chat-dots me-2"></i>Messages
+                                    @if (unreadCount > 0)
+                                    {
+                                        <span class="badge bg-danger rounded-pill ms-auto">@(unreadCount > 99 ? "99+" : unreadCount.ToString())</span>
+                                    }
+                                </a>
+                            </li>
+                            @if (AuthState.IsCustomer)
+                            {
+                                <li><a class="dropdown-item" href="my-jobs"><i class="bi bi-briefcase me-2"></i>My Jobs</a></li>
+                                <li><a class="dropdown-item" href="disputes"><i class="bi bi-exclamation-triangle me-2"></i>My Disputes</a></li>
+                            }
+                            @if (AuthState.IsTradie)
+                            {
+                                <li><hr class="dropdown-divider" /></li>
+                                <li class="dropdown-header">Tradie Tools</li>
+                                <li><a class="dropdown-item" href="tradie/leads"><i class="bi bi-bullseye me-2 text-primary"></i>Smart Leads</a></li>
+                                <li><a class="dropdown-item" href="tradie/quotes"><i class="bi bi-file-text me-2"></i>My Quotes</a></li>
+                                <li><a class="dropdown-item" href="tradie/templates"><i class="bi bi-lightning me-2"></i>Quote Templates</a></li>
+                                <li><a class="dropdown-item" href="tradie/material-bundles"><i class="bi bi-box me-2"></i>Material Bundles</a></li>
+                                <li><a class="dropdown-item" href="tradie/map"><i class="bi bi-map me-2"></i>Job Map</a></li>
+                                <li><a class="dropdown-item" href="tradie/portfolio"><i class="bi bi-images me-2"></i>Portfolio</a></li>
+                                <li><a class="dropdown-item" href="tradie/team"><i class="bi bi-people me-2"></i>Team</a></li>
+                                <li><a class="dropdown-item" href="tradie/verification"><i class="bi bi-patch-check me-2 text-success"></i>Verification</a></li>
+                                <li><a class="dropdown-item" href="tradie/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><a class="dropdown-item" href="disputes"><i class="bi bi-exclamation-triangle me-2"></i>My Disputes</a></li>
+                            }
+                            @if (AuthState.IsAdmin)
+                            {
+                                <li><hr class="dropdown-divider" /></li>
+                                <li class="dropdown-header">Admin</li>
+                                <li><a class="dropdown-item" href="admin/verifications"><i class="bi bi-shield-check me-2 text-warning"></i>Verification Queue</a></li>
+                                <li><a class="dropdown-item" href="admin/disputes"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>Dispute Queue</a></li>
+                            }
+                            <li><hr class="dropdown-divider" /></li>
+                            <li><button class="dropdown-item text-danger" @onclick="HandleLogout"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</button></li>
+                        </ul>
+                    </li>
+                }
+                else
+                {
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="login">Sign In</NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="btn btn-primary" href="register">Get Started</NavLink>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</nav>
+
+@code {
+    private int unreadCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        AuthState.OnAuthStateChanged += HandleAuthStateChanged;
+
+        if (AuthState.IsAuthenticated)
+        {
+            await LoadUnreadCount();
+            await ConnectSignalR();
+        }
+    }
+
+    private async void HandleAuthStateChanged()
+    {
+        if (AuthState.IsAuthenticated)
+        {
+            await LoadUnreadCount();
+            await ConnectSignalR();
+        }
+        else
+        {
+            unreadCount = 0;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ConnectSignalR()
+    {
+        SignalR.OnMessageReceived += HandleMessageReceived;
+        SignalR.OnMessagesRead += HandleMessagesRead;
+        await SignalR.ConnectAsync();
+    }
+
+    private void HandleMessageReceived(MessageDto message)
+    {
+        // Increment unread count for new messages (unless we're currently viewing that conversation)
+        if (!message.IsMine)
+        {
+            unreadCount++;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void HandleMessagesRead(Guid conversationId, Guid userId)
+    {
+        // Reload unread count when messages are read
+        InvokeAsync(async () =>
+        {
+            await LoadUnreadCount();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadUnreadCount()
+    {
+        try
+        {
+            unreadCount = await MessagesService.GetUnreadCountAsync();
+        }
+        catch
+        {
+            unreadCount = 0;
+        }
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        AuthState.OnAuthStateChanged -= HandleAuthStateChanged;
+        SignalR.OnMessageReceived -= HandleMessageReceived;
+        SignalR.OnMessagesRead -= HandleMessagesRead;
+        return ValueTask.CompletedTask;
+    }
+}

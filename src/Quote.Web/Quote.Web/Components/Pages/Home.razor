@@ -1,0 +1,174 @@
+@page "/"
+@inject JobService JobService
+@inject AuthStateService AuthState
+
+<PageTitle>Quote - Australia's Trade Marketplace</PageTitle>
+
+<div class="container py-5">
+    <div class="hero mb-5">
+        <div class="row align-items-center gy-4">
+            <div class="col-lg-7">
+                <span class="eyebrow">
+                    <i class="bi bi-stars"></i> Australia's trade marketplace
+                </span>
+                <h1 class="display-5 fw-bold mt-3">Find trusted tradies without the hassle</h1>
+                <p class="lead text-muted mb-4">
+                    Post jobs, compare quotes, and hire licensed professionals with secure payments and verified reviews.
+                </p>
+
+                <div class="d-flex flex-wrap gap-3">
+                    @if (AuthState.IsAuthenticated)
+                    {
+                        @if (AuthState.IsCustomer)
+                        {
+                            <a href="/jobs/create" class="btn btn-primary btn-lg px-4">Post a Job</a>
+                        }
+                        else
+                        {
+                            <a href="/jobs" class="btn btn-primary btn-lg px-4">Browse Jobs</a>
+                        }
+                    }
+                    else
+                    {
+                        <a href="/register?type=customer" class="btn btn-primary btn-lg px-4">Post a Job</a>
+                        <a href="/register?type=tradie" class="btn btn-outline-primary btn-lg px-4">I'm a Tradie</a>
+                    }
+                </div>
+
+                <div class="d-flex flex-wrap gap-4 mt-4 text-muted small">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-light text-dark"><i class="bi bi-patch-check-fill text-primary"></i> Verified licences</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-light text-dark"><i class="bi bi-shield-lock-fill text-primary"></i> Protected payments</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-light text-dark"><i class="bi bi-chat-quote-fill text-primary"></i> Transparent quotes</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="card hero-actions">
+                    <div class="card-body p-4">
+                        <div class="step-header d-flex align-items-center justify-content-between mb-3">
+                            <div class="d-flex align-items-center">
+                                <div class="icon-pill step-header-icon me-3">
+                                    <i class="bi bi-briefcase-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">Quick start</div>
+                                    <small class="text-muted">Two simple steps to get going</small>
+                                </div>
+                            </div>
+                            <span class="badge guide-badge">Guide</span>
+                        </div>
+
+                        <div class="d-grid gap-3">
+                            <div class="step-card">
+                                <div class="step-icon">
+                                    <i class="bi bi-journal-plus"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">Post your job</div>
+                                    <small class="text-muted">Describe the work and your timeline.</small>
+                                </div>
+                            </div>
+                            <div class="step-card">
+                                <div class="step-icon">
+                                    <i class="bi bi-people-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">Compare quotes</div>
+                                    <small class="text-muted">Chat, review, and pick your tradie.</small>
+                                </div>
+                            </div>
+                            <a href="/jobs" class="btn btn-outline-primary w-100">Browse jobs now</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center mb-4">
+        <h3 class="section-title">Browse by Trade</h3>
+        <p class="text-muted mb-0">Explore popular categories or filter later on the jobs page.</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (categories.Any())
+    {
+        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-5 g-4">
+            @foreach (var category in categories)
+            {
+                <div class="col">
+                    <a href="/jobs?category=@category.Id" class="text-decoration-none">
+                        <div class="card category-card h-100 text-center">
+                            <div class="card-body py-4">
+                                <div class="icon-pill">@category.Icon</div>
+                                <h6 class="card-title text-dark mt-2 mb-1">@category.Name</h6>
+                                <small class="text-muted">@category.Description</small>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center rounded-3 shadow-sm">
+            <p class="mb-1 fw-semibold">Unable to load trade categories.</p>
+            <p class="mb-0 text-muted">Make sure the API is running at http://localhost:5102</p>
+        </div>
+    }
+
+    <div class="row g-4 mt-5 pt-4 border-top">
+        <div class="col-md-4">
+            <div class="feature text-md-start text-center">
+                <div class="feature-icon mb-3">
+                    <i class="bi bi-patch-check-fill"></i>
+                </div>
+                <h5>Verified tradies</h5>
+                <p class="text-muted mb-0">Licence checks and profile verification keep your projects in safe hands.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="feature text-md-start text-center">
+                <div class="feature-icon mb-3">
+                    <i class="bi bi-shield-lock-fill"></i>
+                </div>
+                <h5>Secure payments</h5>
+                <p class="text-muted mb-0">Milestone-based payments and escrow give both sides confidence.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="feature text-md-start text-center">
+                <div class="feature-icon mb-3">
+                    <i class="bi bi-chat-quote-fill"></i>
+                </div>
+                <h5>Trusted reviews</h5>
+                <p class="text-muted mb-0">Read genuine feedback before you hire and leave reviews after the job.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<TradeCategoryDto> categories = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        categories = await JobService.GetTradeCategoriesAsync();
+        isLoading = false;
+    }
+}

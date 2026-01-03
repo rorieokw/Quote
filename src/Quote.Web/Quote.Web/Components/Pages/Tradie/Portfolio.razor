@@ -1,0 +1,205 @@
+@page "/tradie/portfolio"
+@using Quote.Shared.DTOs
+@inject HttpClient Http
+@inject AuthStateService AuthState
+
+
+<PageTitle>My Portfolio - Quote</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">My Portfolio</h1>
+            <p class="text-muted mb-0">Showcase your best work to win more jobs</p>
+        </div>
+        <button class="btn btn-primary" @onclick="() => showAddModal = true">
+            <i class="bi bi-plus-lg me-1"></i>Add Project
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary"></div>
+        </div>
+    }
+    else if (!portfolioItems.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-images fs-1 text-muted"></i>
+            <h5 class="mt-3">No portfolio items yet</h5>
+            <p class="text-muted">Add photos of your completed work to build trust with customers.</p>
+            <button class="btn btn-primary" @onclick="() => showAddModal = true">
+                <i class="bi bi-plus-lg me-1"></i>Add First Project
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var item in portfolioItems)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="position-relative">
+                            @if (item.Media?.Any() == true)
+                            {
+                                <img src="@item.Media.First().MediaUrl" class="card-img-top" style="height: 200px; object-fit: cover;" alt="@item.Title">
+                                @if (item.Media.Count > 1)
+                                {
+                                    <span class="position-absolute top-0 end-0 m-2 badge bg-dark">
+                                        <i class="bi bi-images me-1"></i>@item.Media.Count
+                                    </span>
+                                }
+                            }
+                            else
+                            {
+                                <div class="bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                                    <i class="bi bi-image text-muted fs-1"></i>
+                                </div>
+                            }
+                            @if (item.IsFeatured)
+                            {
+                                <span class="position-absolute top-0 start-0 m-2 badge bg-warning text-dark">
+                                    <i class="bi bi-star-fill me-1"></i>Featured
+                                </span>
+                            }
+                        </div>
+                        <div class="card-body">
+                            <h6 class="card-title">@item.Title</h6>
+                            <p class="card-text text-muted small">@(item.Description?.Length > 100 ? item.Description.Substring(0, 100) + "..." : item.Description)</p>
+                            @if (!string.IsNullOrEmpty(item.TradeCategoryName))
+                            {
+                                <span class="badge bg-primary">@item.TradeCategoryName</span>
+                            }
+                        </div>
+                        <div class="card-footer bg-white border-top-0">
+                            <div class="d-flex justify-content-between">
+                                <button class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Add Portfolio Item Modal -->
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Portfolio Project</h5>
+                    <button type="button" class="btn-close" @onclick="() => showAddModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Project Title *</label>
+                        <input type="text" class="form-control" @bind="newItem.Title" placeholder="e.g., Kitchen Renovation in Marrickville">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="3" @bind="newItem.Description" placeholder="Describe the work you did..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Trade Category</label>
+                        <select class="form-select" @bind="newItem.TradeCategoryId">
+                            <option value="">Select category...</option>
+                            <option value="electrician">Electrician</option>
+                            <option value="plumber">Plumber</option>
+                            <option value="builder">Builder</option>
+                            <option value="painter">Painter</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Photos</label>
+                        <div class="border rounded p-4 text-center bg-light">
+                            <i class="bi bi-cloud-upload fs-1 text-muted"></i>
+                            <p class="mb-0 text-muted">Drag & drop photos or click to upload</p>
+                            <small class="text-muted">Before & after photos work best!</small>
+                        </div>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" @bind="newItem.IsFeatured" id="featured">
+                        <label class="form-check-label" for="featured">
+                            <i class="bi bi-star text-warning me-1"></i>Feature this project on my profile
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showAddModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="AddItem">
+                        <i class="bi bi-plus-lg me-1"></i>Add Project
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool showAddModal = false;
+    private List<PortfolioItemDto> portfolioItems = new();
+    private NewPortfolioItem newItem = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadPortfolio();
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadPortfolio()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<PortfolioListResponse>("api/portfolio");
+            portfolioItems = response?.Items ?? new();
+        }
+        catch { }
+    }
+
+    private async Task AddItem()
+    {
+        try
+        {
+            var tradeCategoryId = Guid.TryParse(newItem.TradeCategoryId, out var catId) ? catId : Guid.Empty;
+            var request = new CreatePortfolioItemRequest(
+                newItem.Title ?? "",
+                newItem.Description,
+                tradeCategoryId,
+                null, // CompletedJobId
+                true, // IsPublic
+                newItem.IsFeatured
+            );
+            var response = await Http.PostAsJsonAsync("api/portfolio", request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadPortfolio();
+                showAddModal = false;
+                newItem = new();
+            }
+        }
+        catch { }
+    }
+
+    private class NewPortfolioItem
+    {
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public string? TradeCategoryId { get; set; }
+        public bool IsFeatured { get; set; }
+    }
+}
