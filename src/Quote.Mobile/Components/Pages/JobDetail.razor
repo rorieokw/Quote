@@ -1402,9 +1402,35 @@
                 saveAsBundle ? newBundleName : null
             );
 
-            var success = await Api.SubmitQuoteAsync(request);
-            if (success)
+            var quoteResponse = await Api.SubmitQuoteAsync(request);
+            if (quoteResponse != null)
             {
+                // Submit photo annotations if any
+                if (photoAnnotations.Any())
+                {
+                    var annotationErrors = 0;
+                    foreach (var annotation in photoAnnotations)
+                    {
+                        var annotationRequest = new CreateAnnotationRequest(
+                            quoteResponse.QuoteId,
+                            null, // OriginalMediaId - we don't have media IDs, only URLs
+                            annotation.ImageBase64,
+                            annotation.AnnotationJson
+                        );
+
+                        var result = await Api.CreateAnnotationAsync(annotationRequest);
+                        if (result == null)
+                        {
+                            annotationErrors++;
+                        }
+                    }
+
+                    if (annotationErrors > 0)
+                    {
+                        toast?.ShowInfo($"Quote submitted but {annotationErrors} photo annotation(s) failed to save");
+                    }
+                }
+
                 showQuoteForm = false;
                 quoteSubmitted = true;
                 materialItems.Clear();

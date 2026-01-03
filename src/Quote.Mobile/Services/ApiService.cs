@@ -88,11 +88,15 @@ public class ApiService
     }
 
     // Quotes
-    public async Task<bool> SubmitQuoteAsync(QuickQuoteRequest request)
+    public async Task<QuickQuoteResponse?> SubmitQuoteAsync(QuickQuoteRequest request)
     {
         await SetAuthHeaderAsync();
         var response = await _httpClient.PostAsJsonAsync("quotes/quick", request);
-        return response.IsSuccessStatusCode;
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<QuickQuoteResponse>();
+        }
+        return null;
     }
 
     public async Task<List<QuoteStatusDto>> GetMyQuotesAsync()
